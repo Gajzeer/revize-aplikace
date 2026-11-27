@@ -123,6 +123,11 @@ export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }, zpravy = []
   }
   // evidenční číslo
   let ev = full.ev_cislo || ''
+  // zprávy, kde se ev. č. při převodu nenašlo: vzít ho z řádku „Ev.č. revize: …“ / „Evidenční číslo …: …“
+  if (!ev) for (const x of full.bloky || []) {
+    const m = x.t === 'p' && (x.x || '').match(/Ev(?:\.\s*č\.|idenční\s+číslo)[^:]{0,20}:\s*(\S+)/i)
+    if (m) { ev = m[1]; break }
+  }
   if (ev) {
     const d0 = parse(full.datum_revize)
     const d1 = parse(datum)
