@@ -490,3 +490,9 @@ input.r { text-align: right; }
 .offbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 9px 14px; border-radius: 10px; background: var(--ochre-soft); color: var(--ochre-ink); font-size: 13.5px; font-weight: 550; margin-bottom: 14px; }
 .offbar.err { background: var(--red-soft); color: var(--red); }
 .offbar button { margin-left: auto; }
+.dane-dlazdice { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 12px; }
+.dane-dlazdice > div { border: 1px solid var(--line); border-top: 3px solid var(--ink); border-radius: 6px; padding: 10px 12px; }
+.dane-dlazdice > div.pay { border-top-color: var(--red); }
+.dane-dlazdice > div.ok { border-top-color: var(--green); }
+.dane-dlazdice b { display: block; font-size: 20px; }
+.dane-dlazdice span { display: block; font-size: 12px; color: var(--ink-2); line-height: 1.35; margin-top: 2px; }
