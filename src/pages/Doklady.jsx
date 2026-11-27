@@ -16,7 +16,7 @@ export default function Doklady() {
       <div className="head">
         <div>
           <h1>Doklady a přístroje</h1>
-          <p>Osvědčení, oprávnění a kalibrace měřicích přístrojů</p>
+          <p>Osvědčení, oprávnění a kalibrace měřicích přístrojů · <a href="#/import">Nahrát úpravy ze souboru</a></p>
         </div>
       </div>
       <div className="grid g-two">

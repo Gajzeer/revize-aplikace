@@ -25,6 +25,19 @@ export default function Import() {
     setErr(null); setLog([]); setBusy(true)
     try {
       const d = JSON.parse(await file.text())
+      if (d.aktualizace) {
+        // dávka úprav připravená Claudem: [{ tabulka, id, zmeny }]
+        for (const u of d.aktualizace) {
+          const { error } = await supabase.from(u.tabulka).update(u.zmeny).eq('id', u.id)
+          if (error) throw new Error(`${u.tabulka} ${u.id}: ${error.message}`)
+        }
+        add(`Upraveno záznamů: ${d.aktualizace.length}`)
+        add('Hotovo.')
+        await reload()
+        setBusy(false)
+        return
+      }
+      if (!empty) throw new Error('Databáze už data obsahuje, celý import by vytvořil duplicity.')
       const strip = ({ id, ...r }) => r
       const map = (rows, newIds) => Object.fromEntries(rows.map((r, i) => [r.id, newIds[i]]))
       const K = map(d.klienti, await ins('klienti', d.klienti.map(strip), add))
@@ -47,16 +60,14 @@ export default function Import() {
   const empty = db.klienti.length === 0 && db.faktury.length === 0
   return (
     <>
-      <div className="head"><div><h1>Nahrát data</h1><p>Jednorázový import klientů, faktur, revizí a ceníku ze souboru</p></div></div>
+      <div className="head"><div><h1>Nahrát data</h1><p>Import dat nebo dávky úprav ze souboru</p></div></div>
       <section className="panel" style={{ maxWidth: 620 }}>
-        {empty ? (
-          <>
-            <p style={{ marginTop: 0 }}>Vyberte soubor <b>data-k-importu.json</b> ze složky CLAUDE\REVIZE APLIKACE. Nahrání trvá několik sekund.</p>
-            <input type="file" accept=".json,application/json" disabled={busy} onChange={(e) => e.target.files[0] && run(e.target.files[0])} />
-          </>
-        ) : (
-          <p style={{ margin: 0 }}>Databáze už data obsahuje, další import by vytvořil duplicity.</p>
-        )}
+        <p style={{ marginTop: 0 }}>
+          {empty
+            ? <>Vyberte soubor <b>data-k-importu.json</b> ze složky CLAUDE\REVIZE APLIKACE. Nahrání trvá několik sekund.</>
+            : <>Vyberte soubor s úpravami, který vám připravil Claude (ve složce CLAUDE\REVIZE APLIKACE, název začíná „uprava-“).</>}
+        </p>
+        <input type="file" accept=".json,application/json" disabled={busy} onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; f && run(f) }} />
         {log.length > 0 && <ul className="small muted">{log.map((l) => <li key={l}>{l}</li>)}</ul>}
         {err && <div className="err" style={{ marginTop: 10 }}>Nahrání selhalo: {err}</div>}
       </section>
