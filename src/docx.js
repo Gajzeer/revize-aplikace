@@ -72,6 +72,28 @@ function setText(p, oldFull, wanted) {
   }
 }
 
+// Odstavec: v aplikaci je tabulátor zobrazen jako 4 mezery. Rozdíl se hledá v této podobě
+// a přepočítá na pozice v originálu, takže mezery i tabulátory kolem změny zůstanou přesně jako ve Wordu.
+function setTextX(p, raw, oldX, newX) {
+  const start = [] // pozice znaku v oldX -> index v raw
+  for (let i = 0; i < raw.length; i++) {
+    if (raw[i] === '\t') for (let k = 0; k < 4; k++) start.push(i + (k ? 0.5 : 0))
+    else start.push(i)
+  }
+  let a = 0
+  while (a < oldX.length && a < newX.length && oldX[a] === newX[a]) a++
+  let s = 0
+  while (s < oldX.length - a && s < newX.length - a && oldX[oldX.length - 1 - s] === newX[newX.length - 1 - s]) s++
+  let bx = oldX.length - s
+  // hranice uvnitř tabulátoru: rozšířit na celý tabulátor
+  while (a > 0 && !Number.isInteger(start[a])) a--
+  while (bx < oldX.length && !Number.isInteger(start[bx])) bx++
+  const ra = a < start.length ? start[a] : raw.trimEnd().length
+  const rb = bx < start.length ? start[bx] : raw.trimEnd().length
+  const mid = newX.slice(a, newX.length - (oldX.length - bx))
+  setText(p, raw, raw.slice(0, ra) + mid + raw.slice(rb))
+}
+
 // převod jako při importu: odstavce bez textu a prázdné řádky tabulek se přeskakují
 function parseBody(doc) {
   const body = doc.getElementsByTagNameNS(W, 'body')[0]
@@ -163,7 +185,7 @@ export async function vyplnitDocx(sablona, media, bloky) {
   tpl.forEach((t, i) => {
     const b = bloky[i]
     if (t.t !== b.t) throw new Error(`Část ${i + 1} zprávy neodpovídá šabloně.`)
-    if (t.t === 'p') { if (t.x !== b.x) setText(t.el, t.raw, b.x.replace(/ {4}/g, '\t') + t.raw.slice(t.raw.replace(/\s+$/, '').length)) }
+    if (t.t === 'p') { if (t.x !== b.x) setTextX(t.el, t.raw, t.x, b.x) }
     else fillTable(t, b)
   })
   zip.file('word/document.xml', new XMLSerializer().serializeToString(doc))
