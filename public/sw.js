@@ -1,5 +1,5 @@
 // Service worker: aplikace se otevře i bez signálu. Data se sem neukládají (ta drží IndexedDB v aplikaci).
-const CACHE = 'revize-app-v3'
+const CACHE = 'revize-app-v4'
 self.addEventListener('install', (e) => {
   // uloží stránku i soubory aplikace, na které odkazuje (skripty, styly)
   e.waitUntil(
@@ -21,6 +21,7 @@ self.addEventListener('fetch', (e) => {
   const own = url.origin === location.origin
   const fonts = /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)
   if (!own && !fonts) return // databáze a ostatní služby jdou vždy přímo
+  if (/msal\.html$/.test(url.pathname)) return // okno přihlášení Microsoft
   if (req.mode === 'navigate') {
     // stránka: vždy čerstvá ze sítě, bez signálu poslední uložená
     e.respondWith(

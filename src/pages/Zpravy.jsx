@@ -5,6 +5,7 @@ import { Modal, useToast } from '../ui'
 import { kvGet, kvSet } from '../offline'
 import { nahratSablony, nazevSouboru, stahnoutWord, wordBlob, zdrojSablony } from '../sablony'
 import { OdeslatEmail } from '../posta'
+import { odhlasitMicrosoft, prihlasenMicrosoft, wordNaPdf } from '../pdf'
 
 export const TYPY_Z = {
   SP: 'Spotřebiče',
@@ -67,6 +68,7 @@ function Seznam() {
       </div>
       {hrom && <Hromadne onClose={() => setHrom(false)} />}
       <SablonyPanel />
+      <PdfPanel />
       {db.zpravy.length === 0 && (
         <section className="panel" style={{ marginBottom: 16 }}>
           <h2>Zatím žádné zprávy</h2>
@@ -243,6 +245,7 @@ function Editor({ id }) {
   const [nahled, setNahled] = useState(false)
   const [wordBusy, setWordBusy] = useState(false)
   const [mail, setMail] = useState(false)
+  const msId = idx.nast.microsoft?.clientId
   const [toast, say] = useToast()
 
   useEffect(() => {
@@ -301,7 +304,7 @@ function Editor({ id }) {
           <button className="btn ghost" onClick={() => setNahled(!nahled)}>{nahled ? 'Upravovat' : 'Náhled'}</button>
           <button
             className="btn"
-            disabled={wordBusy}
+            disabled={!!wordBusy}
             title="Vyplní váš původní Word. PDF pak uložíte ve Wordu: Soubor → Uložit jako → PDF."
             onClick={async () => {
               if (dirty) await ulozit()
@@ -310,8 +313,30 @@ function Editor({ id }) {
               setWordBusy(false)
             }}
           >
-            {wordBusy ? 'Připravuji Word…' : 'Stáhnout Word'}
+            {wordBusy === true ? 'Připravuji Word…' : 'Stáhnout Word'}
           </button>
+          {msId && (
+            <button
+              className="btn"
+              disabled={!!wordBusy}
+              title="Word vyplní a převede do PDF přímo Microsoft Word (přes váš OneDrive), vzhled je 1:1."
+              onClick={async () => {
+                if (dirty) await ulozit()
+                setWordBusy('pdf')
+                try {
+                  const pdf = await wordNaPdf(await wordBlob(z, db.zpravy), msId)
+                  const a = document.createElement('a')
+                  a.href = URL.createObjectURL(pdf)
+                  a.download = `${nazevSouboru(z)}.pdf`
+                  document.body.appendChild(a); a.click(); a.remove()
+                  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+                } catch (e) { say(e.message) }
+                setWordBusy(false)
+              }}
+            >
+              {wordBusy === 'pdf' ? 'Převádím do PDF…' : 'Stáhnout PDF'}
+            </button>
+          )}
           <button className="btn ghost" onClick={async () => { if (dirty) await ulozit(); setMail(true) }}>Odeslat e-mailem</button>
           <button className="btn ghost" onClick={() => { setNahled(true); setTimeout(() => { const t = document.title; document.title = z.nazev; print(); document.title = t }, 100) }}>Rychlý tisk</button>
           <button className="btn ghost" onClick={() => setNova({ datum: iso(TODAY()), vyp: iso(TODAY()), pred: iso(TODAY()), lhuta: rev?.lhuta_mesicu || 12 })}>Nová zpráva z této</button>
@@ -393,7 +418,10 @@ function Editor({ id }) {
             to={kl?.email || ''}
             subject={`Revizní zpráva ${z.ev_cislo || z.nazev}`}
             text={`Dobrý den,\n\nv příloze zasílám revizní zprávu ${z.nazev}${o ? ` (${o.nazev})` : ''}.\n\nS pozdravem\n${dod.jmeno || ''}${dod.telefon ? `\n${dod.telefon}` : ''}`}
-            priprav={async () => [{ name: `${nazevSouboru(z)}.docx`, blob: await wordBlob(z, db.zpravy) }]}
+            priprav={async () => {
+              const w = await wordBlob(z, db.zpravy)
+              return msId ? [{ name: `${nazevSouboru(z)}.pdf`, blob: await wordNaPdf(w, msId) }] : [{ name: `${nazevSouboru(z)}.docx`, blob: w }]
+            }}
             onClose={() => setMail(false)}
             onSent={() => { if (z.stav !== 'predano') { setZ({ ...z, stav: 'predano' }); save('zpravy', { id: z.id, stav: 'predano' }) } }}
           />
@@ -519,6 +547,50 @@ function TabBlok({ b, edit, onChange }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+// nastavení převodu do PDF přes Microsoft Word online (ID aplikace z registrace v Microsoft Entra)
+function PdfPanel() {
+  const { idx, db, save } = useData()
+  const ms = idx.nast.microsoft || {}
+  const [id, setId] = useState(ms.clientId || '')
+  const [ucet, setUcet] = useState(null)
+  const [stav, setStav] = useState(null)
+  const [otevrit, setOtevrit] = useState(false)
+  useEffect(() => { if (ms.clientId) prihlasenMicrosoft(ms.clientId).then(setUcet).catch(() => {}) }, [ms.clientId])
+  if (ms.clientId && ucet && !otevrit) return <div className="small muted" style={{ margin: '-6px 0 14px' }}>PDF přes Word: přihlášeno jako {ucet}. <button className="link small" onClick={() => setOtevrit(true)}>Nastavení</button></div>
+  async function ulozitId() {
+    const row = (db.nastaveni || []).find((r) => r.klic === 'microsoft')
+    await save('nastaveni', row ? { id: row.id, hodnota: { clientId: id.trim() } } : { klic: 'microsoft', hodnota: { clientId: id.trim() } })
+    setStav('Uloženo. Teď se přihlaste.')
+  }
+  async function zkusit() {
+    setStav('Přihlašuji a zkouším převod…')
+    try {
+      const { default: JSZip } = await import('jszip')
+      const zip = new JSZip()
+      zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
+      zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+      zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Test</w:t></w:r></w:p></w:body></w:document>')
+      const pdf = await wordNaPdf(await zip.generateAsync({ type: 'blob' }), id.trim())
+      setUcet(await prihlasenMicrosoft(id.trim()))
+      setStav(`Funguje (zkušební PDF ${Math.round(pdf.size / 1000)} kB). U zpráv je teď tlačítko Stáhnout PDF a e-mail posílá PDF.`)
+      setOtevrit(false)
+    } catch (e) { setStav('Nepodařilo se: ' + e.message) }
+  }
+  return (
+    <section className="panel" style={{ marginBottom: 16 }}>
+      <h2>PDF přes Word</h2>
+      <p style={{ marginTop: 0 }}>Zprávu převede do PDF přímo Microsoft Word přes váš OneDrive, takže PDF vypadá 1:1 jako z Wordu. Stačí jednou vložit ID aplikace z registrace u Microsoftu a přihlásit se.</p>
+      <div className="bar">
+        <input className="input" placeholder="ID aplikace (Application client ID)" value={id} onChange={(e) => setId(e.target.value)} />
+        <button className="btn ghost" disabled={!id.trim() || id.trim() === ms.clientId} onClick={ulozitId}>Uložit</button>
+        <button className="btn" disabled={!ms.clientId || id.trim() !== ms.clientId} onClick={zkusit}>Přihlásit a vyzkoušet</button>
+        {ucet && <button className="btn ghost" onClick={async () => { await odhlasitMicrosoft(ms.clientId); setUcet(null) }}>Odhlásit {ucet}</button>}
+      </div>
+      {stav && <div className="small">{stav}</div>}
+    </section>
   )
 }
 
