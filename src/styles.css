@@ -422,3 +422,4 @@ input.r { text-align: right; }
 .sharebar span { display: block; height: 100%; background: var(--ochre); }
 .panel > h2 .select { flex: none; width: auto; }
 @media (max-width: 720px) { .yrbar { grid-template-columns: 40px minmax(0, 1fr) 96px; } .fin-kpi b { font-size: 19px; } }
+.row.money-total { border-top: 2px solid var(--ink); font-weight: 750; font-size: 17px; padding-top: 10px; }

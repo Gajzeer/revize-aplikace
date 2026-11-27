@@ -169,8 +169,20 @@ export default function Prehled() {
 
         <div className="stack">
           <section className="panel">
-            <h2>Peníze ve hře<a href="#/revize">Revize</a></h2>
+            <h2>Peníze ve hře<a href="#/faktury">Faktury</a></h2>
             <div className="rows">
+              {[...s.unpaid].sort((a, b) => (a.datum_splatnosti || '').localeCompare(b.datum_splatnosti || '')).map((f) => (
+                <div className="row" key={f.id}>
+                  <div>
+                    <div className="t">Faktura {f.cislo} · {idx.klient[f.klient_id]?.zkratka || idx.klient[f.klient_id]?.nazev || ''}</div>
+                    <div className="s">čeká na platbu, splatnost {fmtDate(f.datum_splatnosti)}</div>
+                  </div>
+                  <div className="num" style={{ textAlign: 'right' }}>
+                    {fmtKc(f.castka)}
+                    <div><Due date={f.datum_splatnosti} showDate={false} /></div>
+                  </div>
+                </div>
+              ))}
               <div className="row">
                 <div>
                   <div className="t">Hotovo, čeká na fakturaci</div>
@@ -184,6 +196,10 @@ export default function Prehled() {
                   <div className="s">{mol.stanicZ} stanic, {mol.zbyva.length} revizí · letos hotovo {fmtKc(mol.sumH)}</div>
                 </div>
                 <div className="num" style={{ textAlign: 'right' }}>{fmtKc(mol.sumZ)}</div>
+              </div>
+              <div className="row money-total">
+                <div className="t">Celkem ve hře</div>
+                <div className="num" style={{ textAlign: 'right' }}>{fmtKc(s.unpaid.reduce((a, f) => a + Number(f.castka || 0), 0) + fak.reduce((a, r) => a + Number(r.cena || 0), 0) + mol.sumZ)}</div>
               </div>
             </div>
           </section>
