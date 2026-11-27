@@ -44,6 +44,7 @@ function Seznam() {
   const [q, setQ] = useState('')
   const [typ, setTyp] = useState('')
   const [rok, setRok] = useState('')
+  const [hrom, setHrom] = useState(false)
   const roky = [...new Set(db.zpravy.map((z) => (z.datum_revize || '').slice(0, 4)).filter(Boolean))].sort().reverse()
   const list = useMemo(() => {
     const t = norm(q)
@@ -61,7 +62,9 @@ function Seznam() {
           <h1>Revizní zprávy</h1>
           <p>{db.zpravy.length} zpráv. Novou zprávu vytvoříte nejrychleji z loňské: otevřete ji a dejte „Nová zpráva z této“.</p>
         </div>
+        <button className="btn" onClick={() => setHrom(true)}>Vytvořit letošní zprávy</button>
       </div>
+      {hrom && <Hromadne onClose={() => setHrom(false)} />}
       <SablonyPanel />
       {db.zpravy.length === 0 && (
         <section className="panel" style={{ marginBottom: 16 }}>
@@ -102,6 +105,83 @@ function Seznam() {
         </table>
       </div>
     </>
+  )
+}
+
+// Hromadně: pro každou stanici a druh zprávy vezme poslední zprávu z dřívějška a vytvoří z ní letošní
+function Hromadne({ onClose }) {
+  const { db, idx, reload } = useData()
+  const dnes = iso(TODAY())
+  const [f, setF] = useState({ objekt: '', datum: dnes, vyp: dnes, pred: dnes })
+  const [vyber, setVyber] = useState(null)
+  const [prubeh, setPrubeh] = useState(null)
+  const Y = f.datum.slice(0, 4)
+  const pik = db.klienti.find((k) => k.zkratka === 'PIK')
+  const molObj = db.objekty.filter((o) => o.klient_id === pik?.id).sort((a, b) => a.nazev.localeCompare(b.nazev, 'cs', { numeric: true }))
+  const kandidati = useMemo(() => {
+    const obj = new Set(f.objekt ? [Number(f.objekt)] : molObj.map((o) => o.id))
+    const m = {}
+    for (const z of db.zpravy) {
+      if (!obj.has(z.objekt_id) || !z.datum_revize) continue
+      const k = `${z.objekt_id}|${z.typ}`
+      const x = (m[k] ||= { k, objekt_id: z.objekt_id, typ: z.typ, letos: false, z: null })
+      if (z.datum_revize.startsWith(Y)) x.letos = true
+      else if (z.datum_revize < Y && (!x.z || z.datum_revize > x.z.datum_revize)) x.z = z
+    }
+    return Object.values(m).filter((x) => x.z && !x.letos)
+      .sort((a, b) => (idx.objekt[a.objekt_id]?.nazev || '').localeCompare(idx.objekt[b.objekt_id]?.nazev || '', 'cs', { numeric: true }) || a.typ.localeCompare(b.typ))
+  }, [db, f.objekt, Y])
+  const sel = vyber || Object.fromEntries(kandidati.map((x) => [x.k, true]))
+  const pocet = kandidati.filter((x) => sel[x.k]).length
+  const hotove = db.zpravy.filter((z) => (z.datum_revize || '').startsWith(Y) && (f.objekt ? z.objekt_id === Number(f.objekt) : molObj.some((o) => o.id === z.objekt_id))).length
+
+  async function vytvorit() {
+    const todo = kandidati.filter((x) => sel[x.k])
+    const chyby = []
+    for (let i = 0; i < todo.length; i++) {
+      setPrubeh(`Vytvářím ${i + 1} z ${todo.length}…`)
+      const x = todo[i]
+      const lhuta = db.revize.find((r) => r.id === x.z.revize_id)?.lhuta_mesicu || 12
+      try { await novaZeZpravy(x.z, { datum: f.datum, vyp: f.vyp, pred: f.pred, lhuta }, db.zpravy) } catch (e) { chyby.push(`${x.z.nazev}: ${e.message}`) }
+    }
+    await reload()
+    setPrubeh(chyby.length ? `Hotovo, ${todo.length - chyby.length} vytvořeno. Nepovedlo se: ${chyby.join('; ')}` : `Hotovo, nových zpráv: ${todo.length}. Najdete je v seznamu pod rokem ${Y}.`)
+  }
+
+  return (
+    <Modal title="Vytvořit letošní zprávy" onClose={onClose}>
+      <div className="muted small">Pro každou stanici a druh zprávy vezme poslední zprávu z minulých let a udělá z ní novou, stejně jako „Nová zpráva z této“. Stanice, které už letos zprávu daného druhu mají, se přeskočí. Data pak u jednotlivých zpráv můžete upravit.</div>
+      <label>Stanice
+        <select className="select" value={f.objekt} onChange={(e) => { setF({ ...f, objekt: e.target.value }); setVyber(null) }}>
+          <option value="">Všechny stanice MOL ({molObj.length})</option>
+          {molObj.map((o) => <option key={o.id} value={o.id}>{o.nazev}</option>)}
+        </select>
+      </label>
+      <div className="two">
+        <label>Revize provedena<input className="input" type="date" value={f.datum} onChange={(e) => { setF({ ...f, datum: e.target.value }); setVyber(null) }} /></label>
+        <label>Vypracováno<input className="input" type="date" value={f.vyp} onChange={(e) => setF({ ...f, vyp: e.target.value })} /></label>
+      </div>
+      <label>Předáno<input className="input" type="date" value={f.pred} onChange={(e) => setF({ ...f, pred: e.target.value })} /></label>
+      <div className="small muted">Pro rok {Y}: {kandidati.length ? `chybí ${kandidati.length} ${kandidati.length < 5 ? (kandidati.length === 1 ? 'zpráva' : 'zprávy') : 'zpráv'}` : 'nic nechybí'}{hotove ? `, ${hotove} už je hotových` : ''}.</div>
+      {kandidati.length > 0 && (
+        <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--line)', borderRadius: 8, padding: '6px 10px' }}>
+          <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 600 }}>
+            <input type="checkbox" checked={pocet === kandidati.length} onChange={(e) => setVyber(Object.fromEntries(kandidati.map((x) => [x.k, e.target.checked])))} /> Vybrat vše
+          </label>
+          {kandidati.map((x) => (
+            <label key={x.k} className="small" style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 400 }}>
+              <input type="checkbox" checked={!!sel[x.k]} onChange={(e) => setVyber({ ...sel, [x.k]: e.target.checked })} />
+              <span>{idx.objekt[x.objekt_id]?.nazev} · {TYPY_Z[x.typ] || x.typ} <span className="faint">(z {fmtDate(x.z.datum_revize)})</span></span>
+            </label>
+          ))}
+        </div>
+      )}
+      {prubeh && <div className="small">{prubeh}</div>}
+      <div className="actions">
+        <button className="btn ghost" onClick={onClose}>{prubeh?.startsWith('Hotovo') ? 'Zavřít' : 'Zrušit'}</button>
+        <button className="btn" disabled={!pocet || (prubeh && !prubeh.startsWith('Hotovo'))} onClick={vytvorit}>Vytvořit {pocet} {pocet === 1 ? 'zprávu' : pocet > 1 && pocet < 5 ? 'zprávy' : 'zpráv'}</button>
+      </div>
+    </Modal>
   )
 }
 
