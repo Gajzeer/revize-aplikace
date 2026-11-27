@@ -12,6 +12,7 @@ const P = {
   plus: 'M12 5v14M5 12h14',
   bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
   more: 'M4 7h16M4 12h16M4 17h16',
+  quote: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
   report: 'M8 4h8v3H8zM6 5.5H4.5V21h15V5.5H18M8 12l2 2 4-4M8 17.5h8',
 }
 

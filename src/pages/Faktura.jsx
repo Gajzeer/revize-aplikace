@@ -32,14 +32,16 @@ const emptyItem = () => ({ mnozstvi: 1, jednotka: 'ks', popis: '', cena_ks: '' }
 // --- vystavení nové faktury ------------------------------------------------
 export default function Faktura({ sub }) {
   if (sub?.[0] && sub[0] !== 'nova') return <FakturaTisk id={Number(sub[0])} />
+  if (sub?.[1]?.startsWith('n')) return <NovaFaktura nabidkaId={Number(sub[1].slice(1))} revizeIds={[]} />
   return <NovaFaktura revizeIds={(sub?.[1] || '').split(',').filter(Boolean).map(Number)} />
 }
 
-function NovaFaktura({ revizeIds }) {
+function NovaFaktura({ revizeIds, nabidkaId }) {
   const { db, idx, save } = useData()
   const [toast, say] = useToast()
   const pre = db.revize.filter((r) => revizeIds.includes(r.id))
-  const klient0 = pre[0] ? idx.objekt[pre[0].objekt_id]?.klient_id : ''
+  const nab = nabidkaId ? db.nabidky.find((x) => x.id === nabidkaId) : null
+  const klient0 = nab ? nab.klient_id : pre[0] ? idx.objekt[pre[0].objekt_id]?.klient_id : ''
   const splat = idx.nast.dodavatel?.splatnost_dni || 14
   const [f, setF] = useState(() => {
     const k = idx.klient[klient0]
@@ -48,12 +50,14 @@ function NovaFaktura({ revizeIds }) {
       klient_id: klient0 || '',
       datum_vystaveni: iso(TODAY()),
       datum_splatnosti: plus(iso(TODAY()), splat),
-      zakazka: k?.zkratka === 'PIK' ? `EL.REVIZE MOL ${TODAY().getFullYear()}` : '',
+      zakazka: nab ? `dle cenové nabídky č. ${nab.cislo}` : k?.zkratka === 'PIK' ? `EL.REVIZE MOL ${TODAY().getFullYear()}` : '',
       poznamka: '',
     }
   })
   const [items, setItems] = useState(() =>
-    pre.length
+    nab?.polozky?.length
+      ? nab.polozky.map((it) => ({ mnozstvi: it.mnozstvi, jednotka: it.jednotka || 'ks', popis: it.popis, cena_ks: it.cena_ks }))
+      : pre.length
       ? [...pre]
           .sort((a, b) => a.objekt_id - b.objekt_id)
           .map((r) => ({ mnozstvi: 1, jednotka: 'ks', popis: popisRevize(r, idx.objekt[r.objekt_id]), cena_ks: r.cena ?? '', revize_id: r.id }))
@@ -82,6 +86,7 @@ function NovaFaktura({ revizeIds }) {
       const { error } = await supabase.from('polozky_faktur').insert(rows)
       if (error) throw error
       for (const it of items) if (it.revize_id) await save('revize', { id: it.revize_id, stav: 'planovano' })
+      if (nab) await save('nabidky', { id: nab.id, stav: 'fakturovano', faktura_id: fak.id })
       location.hash = `#/faktura/${fak.id}`
     } catch (e) {
       say('Vystavení selhalo: ' + e.message)
@@ -93,7 +98,7 @@ function NovaFaktura({ revizeIds }) {
     <>
       <div className="head">
         <div>
-          <h1>Vystavit fakturu</h1>
+          <h1>Vystavit fakturu{nab ? ` z nabídky ${nab.cislo}` : ''}</h1>
           <p>Po vystavení se faktura uloží do evidence a otevře se k tisku nebo uložení do PDF.</p>
         </div>
       </div>
