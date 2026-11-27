@@ -93,6 +93,21 @@ h3 { font-size: 15px; font-weight: 700; font-variation-settings: 'wdth' 105; }
 .g-two { grid-template-columns: 1fr 1fr; align-items: start; }
 .stack { display: grid; gap: 18px; }
 
+/* revize po objektech */
+.objlist { display: grid; gap: 8px; }
+.obj { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.obj.open { border-color: var(--ink-3); }
+.obj-head { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 12px 14px; }
+.obj-main { all: unset; cursor: pointer; display: grid; gap: 3px; min-width: 0; }
+.obj-main:focus-visible { outline: 2px solid var(--ochre); outline-offset: 4px; border-radius: 4px; }
+.obj-name { font-weight: 650; }
+.obj-types { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--line-2); color: var(--ink-2); }
+.obj-side { display: flex; align-items: center; gap: 14px; }
+.obj-price { font-weight: 650; min-width: 84px; text-align: right; }
+.obj-detail { border-top: 1px solid var(--line-2); padding: 8px 14px 12px; display: grid; gap: 8px; }
+.obj-rev { display: grid; grid-template-columns: minmax(140px, 1fr) auto auto 80px; gap: 12px; align-items: center; font-size: 14px; }
+
 /* hero: výdělek */
 .earn { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: end; }
 .earn .big { font-size: 46px; font-weight: 800; font-variation-settings: 'wdth' 118; line-height: 1; letter-spacing: -0.02em; }
@@ -245,6 +260,11 @@ tr.click { cursor: pointer; }
   .seg button { flex: 1; padding: 0 6px; }
   td .tag .tl { display: none; }
   .two { grid-template-columns: 1fr; }
+  .obj-head { grid-template-columns: 1fr; }
+  .obj-side { justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .obj-price { min-width: 0; }
+  .obj-rev { grid-template-columns: 1fr auto; }
+  .obj-rev > .faint { grid-column: 1 / -1; order: 3; }
   td, th { padding: 9px 10px; }
 }
 @media (prefers-reduced-motion: no-preference) {

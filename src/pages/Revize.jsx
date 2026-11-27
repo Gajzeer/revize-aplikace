@@ -10,21 +10,33 @@ export default function Revize() {
   const [range, setRange] = useState('90')
   const [done, setDone] = useState(null)
   const [edit, setEdit] = useState(null)
+  const [open, setOpen] = useState({})
   const [toast, say] = useToast()
 
-  const rows = useMemo(() => {
+  // revize v pohledu, seskupené po objektech (benzinka = jeden řádek)
+  const groups = useMemo(() => {
     const t = norm(q)
     const lim = range === 'all' ? null : range === 'late' ? iso(TODAY()) : iso(addMonths(TODAY(), range === '30' ? 1 : 3))
-    return db.revize
+    const g = {}
+    db.revize
       .filter((r) => r.stav !== 'archiv')
       .map((r) => ({ ...r, o: idx.objekt[r.objekt_id] }))
       .filter((r) => !kl || String(r.o?.klient_id) === kl)
       .filter((r) => !lim || (r.pristi && (range === 'late' ? r.pristi < lim : r.pristi <= lim)))
       .filter((r) => !t || norm(`${r.o?.nazev} ${r.o?.adresa} ${r.typ} ${r.o?.kod}`).includes(t))
-      .sort((a, b) => (a.pristi || '9999').localeCompare(b.pristi || '9999') || (a.o?.nazev || '').localeCompare(b.o?.nazev || ''))
+      .forEach((r) => (g[r.objekt_id] ||= { o: r.o, id: r.objekt_id, rv: [] }).rv.push(r))
+    return Object.values(g)
+      .map((x) => {
+        x.rv.sort((a, b) => (a.pristi || '9999').localeCompare(b.pristi || '9999'))
+        x.next = x.rv[0]?.pristi
+        x.cena = x.rv.reduce((a, r) => a + Number(r.cena || 0), 0)
+        return x
+      })
+      .sort((a, b) => (a.next || '9999').localeCompare(b.next || '9999') || (a.o?.nazev || '').localeCompare(b.o?.nazev || ''))
   }, [db, q, kl, range])
 
-  const sum = rows.reduce((a, r) => a + Number(r.cena || 0), 0)
+  const sum = groups.reduce((a, x) => a + x.cena, 0)
+  const nrev = groups.reduce((a, x) => a + x.rv.length, 0)
   const klienti = db.klienti.filter((k) => db.objekty.some((o) => o.klient_id === k.id))
 
   return (
@@ -32,7 +44,7 @@ export default function Revize() {
       <div className="head">
         <div>
           <h1>Revize a termíny</h1>
-          <p>{rows.length} revizí v pohledu{sum > 0 && <> · hodnota podle ceníku {fmtKc(sum)}</>}</p>
+          <p>{groups.length} objektů, {nrev} revizí{sum > 0 && <> · celkem podle ceníku {fmtKc(sum)}</>}</p>
         </div>
         <button className="btn" onClick={() => setEdit({ typ: '', lhuta_mesicu: 12 })}>Přidat revizi</button>
       </div>
@@ -47,77 +59,88 @@ export default function Revize() {
         <Seg value={range} onChange={setRange} options={[['late', 'Po termínu'], ['30', 'Do měsíce'], ['90', 'Do 3 měsíců'], ['all', 'Vše']]} />
       </div>
 
-      <div className="tablewrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Objekt</th>
-              <th className="hide-m">Revize</th>
-              <th className="hide-m">Poslední</th>
-              <th>Příští</th>
-              <th className="r hide-m">Cena</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan="6" className="muted">V tomto výběru nic není. Zkuste delší období.</td></tr>
-            )}
-            {rows.map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <button className="link" style={{ fontWeight: 600, textAlign: 'left', color: 'var(--ink)', textDecoration: 'none' }} title="Upravit revizi" onClick={() => setEdit(r)}>{r.o?.nazev}</button>
-                  <div className="small muted">{r.o?.adresa}</div>
-                  <div className="small show-m" style={{ marginTop: 2 }}>{r.typ}</div>
-                </td>
-                <td className="hide-m">
-                  {r.typ}
-                  {r.lhuta_mesicu && <div className="small faint">lhůta {r.lhuta_mesicu} měs.</div>}
-                </td>
-                <td className="num hide-m">{fmtDate(r.posledni)}</td>
-                <td><Due date={r.pristi} /></td>
-                <td className="r num hide-m">{r.cena ? fmtKc(r.cena) : ''}</td>
-                <td className="r">
-                  <button className="btn ghost sm" onClick={() => setDone({ ...r, datum: iso(TODAY()) })}>Hotovo</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {groups.length === 0 && <div className="panel muted">V tomto výběru nic není. Zkuste delší období.</div>}
+      <div className="objlist">
+        {groups.map((x) => {
+          const isOpen = open[x.id]
+          return (
+            <section key={x.id} className={`obj ${isOpen ? 'open' : ''}`}>
+              <div className="obj-head">
+                <button className="obj-main" onClick={() => setOpen({ ...open, [x.id]: !isOpen })} aria-expanded={!!isOpen}>
+                  <span className="obj-name">{x.o?.nazev}</span>
+                  <span className="small muted">{x.o?.adresa}</span>
+                  <span className="obj-types">
+                    {x.rv.map((r) => <span key={r.id} className="chip">{r.typ}</span>)}
+                  </span>
+                </button>
+                <div className="obj-side">
+                  <Due date={x.next} />
+                  <span className="obj-price num">{x.cena ? fmtKc(x.cena) : ''}</span>
+                  <button className="btn ghost sm" onClick={() => setDone({ o: x.o, rv: x.rv, datum: iso(TODAY()), sel: Object.fromEntries(x.rv.map((r) => [r.id, !r.pristi || r.pristi <= iso(addMonths(TODAY(), 3))])) })}>Hotovo</button>
+                </div>
+              </div>
+              {isOpen && (
+                <div className="obj-detail">
+                  {x.rv.map((r) => (
+                    <div key={r.id} className="obj-rev">
+                      <button className="link" style={{ color: 'var(--ink)', textAlign: 'left' }} onClick={() => setEdit(r)} title="Upravit revizi">
+                        {r.typ}
+                      </button>
+                      <span className="small faint">naposledy {fmtDate(r.posledni)}{r.lhuta_mesicu ? `, lhůta ${r.lhuta_mesicu} měs.` : ''}</span>
+                      <Due date={r.pristi} />
+                      <span className="num small" style={{ textAlign: 'right' }}>{r.cena ? fmtKc(r.cena) : ''}</span>
+                    </div>
+                  ))}
+                  {(x.o?.vedouci || x.o?.telefon) && <div className="small muted">{[x.o.vedouci, x.o.telefon].filter(Boolean).join(' · ')}</div>}
+                </div>
+              )}
+            </section>
+          )
+        })}
       </div>
 
       {done && (
-        <Modal title="Zapsat provedenou revizi" onClose={() => setDone(null)}>
-          <div>
-            <b>{done.o?.nazev}</b>
-            <div className="muted">{done.typ}</div>
-          </div>
+        <Modal title="Zapsat provedené revize" onClose={() => setDone(null)}>
+          <div><b>{done.o?.nazev}</b></div>
           <label>
             Datum provedení
             <input className="input" type="date" value={done.datum} onChange={(e) => setDone({ ...done, datum: e.target.value })} />
           </label>
+          <div style={{ display: 'grid', gap: 6 }}>
+            {done.rv.map((r) => (
+              <label key={r.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontWeight: 500, color: 'var(--ink)' }}>
+                <input type="checkbox" checked={!!done.sel[r.id]} onChange={(e) => setDone({ ...done, sel: { ...done.sel, [r.id]: e.target.checked } })} />
+                <span style={{ flex: 1 }}>{r.typ}</span>
+                <span className="small faint">příště {r.lhuta_mesicu ? fmtDate(iso(addMonths(parse(done.datum), r.lhuta_mesicu))) : 'ručně'}</span>
+              </label>
+            ))}
+          </div>
           <div className="muted small">
-            Příští termín: {done.lhuta_mesicu ? fmtDate(iso(addMonths(parse(done.datum), done.lhuta_mesicu))) : 'bez lhůty, doplňte ručně'}
+            K fakturaci: {fmtKc(done.rv.filter((r) => done.sel[r.id]).reduce((a, r) => a + Number(r.cena || 0), 0))}
           </div>
           <div className="actions">
             <button className="btn ghost" onClick={() => setDone(null)}>Zrušit</button>
             <button
               className="btn"
+              disabled={!done.rv.some((r) => done.sel[r.id])}
               onClick={async () => {
                 try {
-                  await save('revize', {
-                    id: done.id,
-                    posledni: done.datum,
-                    pristi: done.lhuta_mesicu ? iso(addMonths(parse(done.datum), done.lhuta_mesicu)) : done.pristi,
-                  })
+                  const list = done.rv.filter((r) => done.sel[r.id])
+                  for (const r of list) {
+                    await save('revize', {
+                      id: r.id,
+                      posledni: done.datum,
+                      pristi: r.lhuta_mesicu ? iso(addMonths(parse(done.datum), r.lhuta_mesicu)) : r.pristi,
+                    })
+                  }
                   setDone(null)
-                  say('Revize zapsána')
+                  say(list.length > 1 ? `Zapsáno ${list.length} revizí` : 'Revize zapsána')
                 } catch (e) {
                   say('Uložení selhalo: ' + e.message)
                 }
               }}
             >
-              Zapsat revizi
+              Zapsat revize
             </button>
           </div>
         </Modal>
