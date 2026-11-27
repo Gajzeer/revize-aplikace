@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useData } from '../data'
+import { cekaFakturace, molRok } from '../mol'
 import { TODAY, addMonths, daysTo, fmtDate, fmtKc, iso, parse } from '../lib'
 import { Due } from '../ui'
 
@@ -89,6 +90,8 @@ export default function Prehled() {
     return items.sort((a, b) => a.date.localeCompare(b.date))
   }, [db])
 
+  const mol = useMemo(() => molRok(db, Y), [db, Y])
+  const fak = useMemo(() => cekaFakturace(db), [db])
   const delta = s.prevToDate ? Math.round(((s.total - s.prevToDate) / s.prevToDate) * 100) : null
   const late = due.filter((r) => daysTo(r.pristi) < 0).length
 
@@ -160,6 +163,26 @@ export default function Prehled() {
         </div>
 
         <div className="stack">
+          <section className="panel">
+            <h2>Peníze ve hře<a href="#/revize">Revize</a></h2>
+            <div className="rows">
+              <div className="row">
+                <div>
+                  <div className="t">Hotovo, čeká na fakturaci</div>
+                  <div className="s">{fak.length ? `${new Set(fak.map((r) => r.objekt_id)).size} objektů, ${fak.length} revizí` : 'nic nečeká'}</div>
+                </div>
+                <div className="num" style={{ textAlign: 'right' }}>{fmtKc(fak.reduce((a, r) => a + Number(r.cena || 0), 0))}</div>
+              </div>
+              <div className="row">
+                <div>
+                  <div className="t">MOL zbývá do konce roku</div>
+                  <div className="s">{mol.stanicZ} stanic, {mol.zbyva.length} revizí · letos hotovo {fmtKc(mol.sumH)}</div>
+                </div>
+                <div className="num" style={{ textAlign: 'right' }}>{fmtKc(mol.sumZ)}</div>
+              </div>
+            </div>
+          </section>
+
           <section className="panel">
             <h2>
               Revize do měsíce{late > 0 && <span className="pill late" style={{ marginLeft: 'auto', marginRight: 8 }}>{late} po termínu</span>}

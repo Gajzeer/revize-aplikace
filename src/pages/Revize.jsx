@@ -2,27 +2,38 @@ import { useMemo, useState } from 'react'
 import { useData } from '../data'
 import { TODAY, addMonths, fmtDate, fmtKc, iso, norm, parse } from '../lib'
 import { Due, Modal, Seg, useToast } from '../ui'
+import { cekaFakturace, molRok } from '../mol'
 
 export default function Revize() {
   const { db, idx, save } = useData()
   const [q, setQ] = useState('')
   const [kl, setKl] = useState('')
   const [range, setRange] = useState('90')
+  const [view, setView] = useState('terminy') // terminy | fakturace | mol
   const [done, setDone] = useState(null)
   const [edit, setEdit] = useState(null)
   const [open, setOpen] = useState({})
   const [toast, say] = useToast()
 
   // revize v pohledu, seskupené po objektech (benzinka = jeden řádek)
+  const Y = TODAY().getFullYear()
+  const mol = useMemo(() => molRok(db, Y), [db, Y])
+  const fak = useMemo(() => cekaFakturace(db), [db])
+  const fakSum = fak.reduce((a, r) => a + Number(r.cena || 0), 0)
+  const fakObj = new Set(fak.map((r) => r.objekt_id)).size
+
   const groups = useMemo(() => {
     const t = norm(q)
     const lim = range === 'all' ? null : range === 'late' ? iso(TODAY()) : iso(addMonths(TODAY(), range === '30' ? 1 : 3))
     const g = {}
-    db.revize
-      .filter((r) => r.stav !== 'archiv')
+    const base =
+      view === 'fakturace' ? cekaFakturace(db)
+      : view === 'mol' ? mol.zbyva
+      : db.revize.filter((r) => r.stav !== 'archiv')
+    base
       .map((r) => ({ ...r, o: idx.objekt[r.objekt_id] }))
       .filter((r) => !kl || String(r.o?.klient_id) === kl)
-      .filter((r) => !lim || (r.pristi && (range === 'late' ? r.pristi < lim : r.pristi <= lim)))
+      .filter((r) => view !== 'terminy' || !lim || (r.pristi && (range === 'late' ? r.pristi < lim : r.pristi <= lim)))
       .filter((r) => !t || norm(`${r.o?.nazev} ${r.o?.adresa} ${r.typ} ${r.o?.kod}`).includes(t))
       .forEach((r) => (g[r.objekt_id] ||= { o: r.o, id: r.objekt_id, rv: [] }).rv.push(r))
     return Object.values(g)
@@ -33,7 +44,7 @@ export default function Revize() {
         return x
       })
       .sort((a, b) => (a.next || '9999').localeCompare(b.next || '9999') || (a.o?.nazev || '').localeCompare(b.o?.nazev || ''))
-  }, [db, q, kl, range])
+  }, [db, q, kl, range, view, mol])
 
   const sum = groups.reduce((a, x) => a + x.cena, 0)
   const nrev = groups.reduce((a, x) => a + x.rv.length, 0)
@@ -56,8 +67,27 @@ export default function Revize() {
             <option key={k.id} value={k.id}>{idx.label[k.id]}</option>
           ))}
         </select>
-        <Seg value={range} onChange={setRange} options={[['late', 'Po termínu'], ['30', 'Do měsíce'], ['90', 'Do 3 měsíců'], ['all', 'Vše']]} />
+        {view === 'terminy' && <Seg value={range} onChange={setRange} options={[['late', 'Po termínu'], ['30', 'Do měsíce'], ['90', 'Do 3 měsíců'], ['all', 'Vše']]} />}
       </div>
+
+      <div className="sumcards">
+        <button className={`sumcard ${view === 'fakturace' ? 'on' : ''}`} onClick={() => setView(view === 'fakturace' ? 'terminy' : 'fakturace')} aria-pressed={view === 'fakturace'}>
+          <span className="sc-l">Hotovo, čeká na fakturaci</span>
+          <span className="sc-v num">{fmtKc(fakSum)}</span>
+          <span className="sc-s">{fakObj ? `${fakObj} ${fakObj === 1 ? 'objekt' : fakObj < 5 ? 'objekty' : 'objektů'}, ${fak.length} revizí` : 'nic nečeká'}</span>
+        </button>
+        <button className={`sumcard mol ${view === 'mol' ? 'on' : ''}`} onClick={() => setView(view === 'mol' ? 'terminy' : 'mol')} aria-pressed={view === 'mol'}>
+          <span className="sc-l">MOL zbývá do 31. 12. {Y}</span>
+          <span className="sc-v num">{fmtKc(mol.sumZ)}</span>
+          <span className="sc-s">{mol.stanicZ} stanic, {mol.zbyva.length} revizí · letos hotovo {fmtKc(mol.sumH)}</span>
+        </button>
+      </div>
+      {view !== 'terminy' && (
+        <div className="small muted" style={{ margin: '-4px 0 12px' }}>
+          {view === 'fakturace' ? 'Revize provedené, ale ještě nevyfakturované. Po vystavení faktury klikněte na Vyfakturováno.' : 'Stanice MOL, kde letos ještě chybí revize s termínem do konce roku.'}{' '}
+          <button className="link" onClick={() => setView('terminy')}>Zpět na termíny</button>
+        </div>
+      )}
 
       {groups.length === 0 && <div className="panel muted">V tomto výběru nic není. Zkuste delší období.</div>}
       <div className="objlist">
@@ -74,19 +104,35 @@ export default function Revize() {
                   </span>
                 </button>
                 <div className="obj-side">
-                  <Due date={x.next} />
+                  {view === 'fakturace' ? <span className="small muted">hotovo {fmtDate(x.rv[0]?.posledni)}</span> : <Due date={x.next} />}
                   <span className="obj-price num">{x.cena ? fmtKc(x.cena) : ''}</span>
-                  <button className="btn ghost sm" onClick={() => setDone({ o: x.o, rv: x.rv, datum: iso(TODAY()), sel: Object.fromEntries(x.rv.map((r) => [r.id, !r.pristi || r.pristi <= iso(addMonths(TODAY(), 3))])) })}>Hotovo</button>
+                  {view === 'fakturace' ? (
+                    <button
+                      className="btn sm"
+                      onClick={async () => {
+                        try {
+                          for (const r of x.rv) await save('revize', { id: r.id, stav: 'planovano' })
+                          say(`${x.o?.nazev}: vyfakturováno`)
+                        } catch (e) {
+                          say('Uložení selhalo: ' + e.message)
+                        }
+                      }}
+                    >
+                      Vyfakturováno
+                    </button>
+                  ) : (
+                  <button className="btn ghost sm" onClick={() => setDone({ o: x.o, rv: x.rv, datum: iso(TODAY()), sel: Object.fromEntries(x.rv.map((r) => [r.id, !r.pristi || r.pristi <= iso(addMonths(TODAY(), 3))])), ceka: true })}>Hotovo</button>
+                  )}
                 </div>
               </div>
               {isOpen && (
                 <div className="obj-detail">
                   {x.rv.map((r) => (
-                    <div key={r.id} className="obj-rev">
+                    <div key={r.id} className={`obj-rev ${r.stav === 'ceka_fakturace' ? 'wait' : ''}`}>
                       <button className="link" style={{ color: 'var(--ink)', textAlign: 'left' }} onClick={() => setEdit(r)} title="Upravit revizi">
                         {r.typ}
                       </button>
-                      <span className="small faint">naposledy {fmtDate(r.posledni)}{r.lhuta_mesicu ? `, lhůta ${r.lhuta_mesicu} měs.` : ''}</span>
+                      <span className="small faint">naposledy {fmtDate(r.posledni)}{r.lhuta_mesicu ? `, lhůta ${r.lhuta_mesicu} měs.` : ''}{r.stav === 'ceka_fakturace' ? ' · čeká na fakturaci' : ''}</span>
                       <Due date={r.pristi} />
                       <span className="num small" style={{ textAlign: 'right' }}>{r.cena ? fmtKc(r.cena) : ''}</span>
                     </div>
@@ -115,6 +161,10 @@ export default function Revize() {
               </label>
             ))}
           </div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontWeight: 500, color: 'var(--ink)' }}>
+            <input type="checkbox" checked={!!done.ceka} onChange={(e) => setDone({ ...done, ceka: e.target.checked })} style={{ marginTop: 3 }} />
+            <span>Ještě nevyfakturováno<span className="small muted" style={{ display: 'block', fontWeight: 400 }}>Zařadí se do „Hotovo, čeká na fakturaci“, dokud nedopíšete zprávu a nevystavíte fakturu.</span></span>
+          </label>
           <div className="muted small">
             K fakturaci: {fmtKc(done.rv.filter((r) => done.sel[r.id]).reduce((a, r) => a + Number(r.cena || 0), 0))}
           </div>
@@ -130,6 +180,7 @@ export default function Revize() {
                     await save('revize', {
                       id: r.id,
                       posledni: done.datum,
+                      stav: done.ceka ? 'ceka_fakturace' : 'planovano',
                       pristi: r.lhuta_mesicu ? iso(addMonths(parse(done.datum), r.lhuta_mesicu)) : r.pristi,
                     })
                   }
