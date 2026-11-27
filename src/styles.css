@@ -447,3 +447,14 @@ input.r { text-align: right; }
   .sheet.rz { width: auto; min-height: 0; padding: 0; }
   .rz-tab tr { break-inside: avoid; }
 }
+/* Upozornění */
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--ochre-ink); cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.panel > h2 .linkbtn { margin-left: auto; }
+.panel > h2 .count { font-size: 12px; font-weight: 700; background: var(--red); color: #fff; border-radius: 99px; padding: 1px 8px; }
+.upoz .row { align-items: center; }
+.upoz-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--ochre); vertical-align: 1px; }
+.upoz-dot.late { background: var(--red); }
+.upoz-late .t { color: var(--red); }
+.upoz-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 10px; }
+.upoz-foot:empty { display: none; }

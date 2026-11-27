@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useData } from '../data'
 import { cekaFakturace, molRok } from '../mol'
 import Finance from './Finance'
+import UpozorneniPanel from './Upozorneni'
 import { TODAY, addMonths, daysTo, fmtDate, fmtKc, iso, parse } from '../lib'
 import { Due } from '../ui'
 
@@ -116,6 +117,7 @@ export default function Prehled() {
           <a className="btn" href="#/import" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>Nahrát data</a>
         </section>
       )}
+      <div style={{ marginBottom: 18 }}><UpozorneniPanel /></div>
       <div className="grid g-dash">
         <div className="stack">
           <section className="panel">

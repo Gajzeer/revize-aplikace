@@ -15,6 +15,7 @@ import Import from './pages/Import'
 import Kalendar from './pages/Kalendar'
 import Faktura from './pages/Faktura'
 import Zpravy from './pages/Zpravy'
+import { oznamitDnes, seznamUpozorneni } from './upozorneni'
 
 const PAGES = [
   { id: 'prehled', label: 'Přehled', icon: 'home', C: Prehled },
@@ -52,6 +53,8 @@ function Shell({ email }) {
   }
   const P = page === 'import' ? { id: 'import', C: Import } : page === 'faktura' ? { id: 'faktury', C: Faktura } : PAGES.find((p) => p.id === page) || PAGES[0]
   useEffect(() => { window.scrollTo(0, 0) }, [hash])
+  const { idx } = useData()
+  useEffect(() => { if (db?.revize) oznamitDnes(seznamUpozorneni(db, idx)) }, [db])
 
   return (
     <div className="shell">
