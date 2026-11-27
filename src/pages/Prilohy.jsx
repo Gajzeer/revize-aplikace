@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useData } from '../data'
 import { fmtDate, supabase } from '../lib'
 import { Modal } from '../ui'
+import { jeSitovaChyba } from '../offline'
 
 const BUCKET = 'prilohy'
 const isImg = (p) => (p.typ || '').startsWith('image/')
@@ -25,7 +26,7 @@ async function zmensit(file) {
 }
 
 export default function Prilohy({ objektId, open = true }) {
-  const { db, save, remove } = useData()
+  const { db, save, remove, nahratPozdeji } = useData()
   const list = (db.prilohy || []).filter((p) => p.objekt_id === objektId).sort((a, b) => b.id - a.id)
   const [urls, setUrls] = useState({})
   const [busy, setBusy] = useState(null)
@@ -37,7 +38,7 @@ export default function Prilohy({ objektId, open = true }) {
   const key = list.map((p) => p.id).join(',')
 
   useEffect(() => {
-    const chybi = list.filter((p) => !urls[p.id])
+    const chybi = list.filter((p) => !urls[p.id] && p.id > 0)
     if (!open || !chybi.length) return
     supabase.storage.from(BUCKET).createSignedUrls(chybi.map((p) => p.cesta), 3600).then(({ data }) => {
       if (!data) return
@@ -55,9 +56,17 @@ export default function Prilohy({ objektId, open = true }) {
       try {
         const f = await zmensit(arr[i])
         const cesta = `objekt-${objektId}/${Date.now()}-${f.name.normalize('NFD').replace(/[^\w.-]+/g, '_')}`
-        const { error } = await supabase.storage.from(BUCKET).upload(cesta, f, { contentType: f.type || 'application/octet-stream' })
-        if (error) throw error
-        await save('prilohy', { objekt_id: objektId, nazev: arr[i].name, cesta, typ: f.type || null, velikost: f.size })
+        const row = { objekt_id: objektId, nazev: arr[i].name, cesta, typ: f.type || null, velikost: f.size }
+        let offline = !navigator.onLine
+        if (!offline) {
+          const { error } = await supabase.storage.from(BUCKET).upload(cesta, f, { contentType: f.type || 'application/octet-stream' })
+          if (error && jeSitovaChyba(error)) offline = true
+          else if (error) throw error
+        }
+        if (offline) {
+          await nahratPozdeji(row, f)
+          setUrls((u) => ({ ...u, [cesta]: URL.createObjectURL(f) }))
+        } else await save('prilohy', row)
       } catch (e) {
         setErr(`${arr[i].name}: ${e.message}`)
       }
@@ -88,7 +97,8 @@ export default function Prilohy({ objektId, open = true }) {
         <div className="thumbs">
           {fotky.map((p) => (
             <button key={p.id} className="thumb" onClick={() => setDetail(p)} title={p.nazev}>
-              {urls[p.id] ? <img src={urls[p.id]} alt={p.nazev} loading="lazy" /> : <span className="faint small">…</span>}
+              {urls[p.id] || urls[p.cesta] ? <img src={urls[p.id] || urls[p.cesta]} alt={p.nazev} loading="lazy" /> : <span className="faint small">{p.ceka ? 'čeká' : '…'}</span>}
+              {p.ceka && <span className="thumb-wait">čeká na signál</span>}
             </button>
           ))}
         </div>
@@ -96,7 +106,7 @@ export default function Prilohy({ objektId, open = true }) {
       {docs.map((p) => (
         <div key={p.id} className="doc-row small">
           <a href={urls[p.id] || '#'} target="_blank" rel="noreferrer">{p.nazev}</a>
-          <span className="faint">{velikost(p.velikost || 0)} · {fmtDate(p.created_at?.slice(0, 10))}</span>
+          <span className="faint">{p.ceka ? 'čeká na signál · ' : ''}{velikost(p.velikost || 0)} · {fmtDate(p.created_at?.slice(0, 10))}</span>
           <button className="link small" onClick={() => setDetail(p)}>…</button>
         </div>
       ))}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useData } from '../data'
 import { TODAY, addMonths, fmtDate, iso, norm, parse, supabase } from '../lib'
 import { Modal, useToast } from '../ui'
+import { kvGet, kvSet } from '../offline'
 
 export const TYPY_Z = {
   SP: 'Spotřebiče',
@@ -143,7 +144,7 @@ export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }) {
 }
 
 function Editor({ id }) {
-  const { db, idx, reload, remove } = useData()
+  const { db, idx, reload, remove, save } = useData()
   const meta = db.zpravy.find((z) => z.id === id)
   const [z, setZ] = useState(null)
   const [dirty, setDirty] = useState(false)
@@ -156,7 +157,20 @@ function Editor({ id }) {
 
   useEffect(() => {
     setZ(null)
-    supabase.from('zpravy').select('*').eq('id', id).single().then(({ data, error }) => (error ? say('Zprávu se nepodařilo načíst: ' + error.message) : setZ({ ...data, bloky: data.bloky || [] })))
+    // obsah zprávy: ze sítě, bez signálu z posledně otevřené kopie v telefonu
+    const zCache = () => kvGet(`zprava-${id}`).then((c) => (c ? setZ(c) : say('Zprávu se nepodařilo načíst. Bez signálu jdou otevřít jen zprávy, které už byly v tomto zařízení otevřené.')))
+    if (id < 0) return void zCache()
+    supabase.from('zpravy').select('*').eq('id', id).single()
+      .then(({ data, error }) => {
+        if (error) return zCache()
+        const v = { ...data, bloky: data.bloky || [] }
+        kvGet(`zprava-${id}`).then((c) => {
+          // neodeslaná úprava z terénu je novější než verze v databázi
+          if (c && new Date(c.updated_at || 0) > new Date(v.updated_at || 0)) setZ(c)
+          else { setZ(v); kvSet(`zprava-${id}`, v) }
+        })
+      })
+      .catch(zCache)
   }, [id])
   useEffect(() => {
     const f = (e) => { if (dirty) { e.preventDefault(); e.returnValue = '' } }
@@ -173,13 +187,17 @@ function Editor({ id }) {
 
   async function ulozit() {
     setBusy(true)
-    const { id: _id, created_at, ...row } = z
-    const { error } = await supabase.from('zpravy').update({ ...row, objekt_id: row.objekt_id ? Number(row.objekt_id) : null, revize_id: row.revize_id ? Number(row.revize_id) : null, updated_at: new Date().toISOString() }).eq('id', z.id)
+    const { created_at, ...row } = z
+    const upd = { ...row, objekt_id: row.objekt_id ? Number(row.objekt_id) : null, revize_id: row.revize_id ? Number(row.revize_id) : null, updated_at: new Date().toISOString() }
+    try {
+      await save('zpravy', upd)
+      setZ({ ...z, updated_at: upd.updated_at })
+      setDirty(false)
+      say(navigator.onLine ? 'Zpráva uložena' : 'Uloženo v telefonu, odešle se po připojení')
+    } catch (e) {
+      say('Uložení selhalo: ' + e.message)
+    }
     setBusy(false)
-    if (error) return say('Uložení selhalo: ' + error.message)
-    setDirty(false)
-    say('Zpráva uložena')
-    reload()
   }
 
   return (

@@ -18,6 +18,7 @@ import Zpravy from './pages/Zpravy'
 import Nabidky from './pages/Nabidky'
 import Dane from './pages/Dane'
 import { oznamitDnes, seznamUpozorneni } from './upozorneni'
+import { frontaVse, smazatVse } from './offline'
 
 const PAGES = [
   { id: 'prehled', label: 'Přehled', icon: 'home', C: Prehled },
@@ -31,6 +32,14 @@ const PAGES = [
   { id: 'cenik', label: 'Ceník', icon: 'tag', C: Cenik },
   { id: 'doklady', label: 'Doklady a přístroje', short: 'Doklady', icon: 'shield', C: Doklady },
 ]
+
+// odhlášení smaže i data uložená v zařízení pro práci bez signálu (neodeslané změny se ztratí, proto upozorní)
+async function odhlasit() {
+  const f = await frontaVse()
+  if (f.length && !confirm(`V zařízení je ${f.length} neodeslaných změn. Odhlášením se ztratí. Pokračovat?`)) return
+  await smazatVse()
+  supabase.auth.signOut()
+}
 
 let navCount = 0 // počet přechodů uvnitř aplikace (pro tlačítko Zpět)
 
@@ -47,7 +56,7 @@ function useHash() {
 function Shell({ email }) {
   const hash = useHash()
   const [page, ...rest] = hash.split('/')
-  const { db, error, lateCount } = useData()
+  const { db, error, lateCount, stav, synchronizovat } = useData()
   const [more, setMore] = useState(false)
   const MOBILE = ['prehled', 'revize', 'kalendar', 'klienti', 'faktury']
   const back = () => {
@@ -81,11 +90,24 @@ function Shell({ email }) {
         </nav>
         <div className="foot">
           {email && <div>{email}</div>}
-          <button onClick={() => supabase.auth.signOut()}>Odhlásit</button>
+          <button onClick={odhlasit}>Odhlásit</button>
         </div>
       </aside>
       <main className="main">
         {error && <div className="panel err">Data se nepodařilo načíst: {error}</div>}
+        {stav && (!stav.online || stav.cekajici > 0 || stav.chyba) && (
+          <div className={`offbar no-print ${stav.chyba ? 'err' : ''}`}>
+            <span>
+              {stav.chyba
+                ? `Jednu změnu databáze nepřijala (${stav.chyba}).`
+                : !stav.online
+                  ? `Bez signálu. Pracujete s daty z ${stav.z ? new Date(stav.z).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'posledního připojení'}.`
+                  : 'Odesílám změny z terénu…'}
+              {stav.cekajici > 0 && ` Neodeslané změny: ${stav.cekajici}. Odešlou se samy po připojení.`}
+            </span>
+            {navigator.onLine && <button className="btn ghost sm" onClick={synchronizovat}>Zkusit znovu</button>}
+          </div>
+        )}
         {!db && !error && <div className="muted">Načítám data…</div>}
         {db && hash !== 'prehled' && (
           <button className="backbtn no-print" onClick={back} aria-label="Zpět">
@@ -117,7 +139,7 @@ function Shell({ email }) {
               </a>
             ))}
             <a href="#/import" onClick={() => setMore(false)}><Icon name="doc" />Nahrát úpravy ze souboru</a>
-            <button onClick={() => supabase.auth.signOut()}><Icon name="home" />Odhlásit</button>
+            <button onClick={odhlasit}><Icon name="home" />Odhlásit</button>
           </div>
         </div>
       )}
@@ -142,6 +164,9 @@ function App() {
     </DataProvider>
   )
 }
+
+// aplikace se otevře i bez signálu (uložené soubory aplikace v telefonu)
+if ('serviceWorker' in navigator && import.meta.env.PROD) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
