@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useData } from '../data'
 import { cekaFakturace, molRok } from '../mol'
+import Finance from './Finance'
 import { TODAY, addMonths, daysTo, fmtDate, fmtKc, iso, parse } from '../lib'
 import { Due } from '../ui'
 
@@ -242,6 +243,7 @@ export default function Prehled() {
           </section>
         </div>
       </div>
+      <Finance />
     </>
   )
 }

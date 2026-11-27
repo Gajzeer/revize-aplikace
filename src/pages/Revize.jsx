@@ -114,7 +114,7 @@ export default function Revize() {
                       title="Fakturu jste vystavil jinde – jen odebrat ze seznamu"
                       onClick={async () => {
                         try {
-                          for (const r of x.rv) await save('revize', { id: r.id, stav: 'planovano' })
+                          for (const r of x.rv) await save('revize', { id: r.id, stav: 'planovano', predchozi: { posledni: r.posledni, pristi: r.pristi, stav: r.stav } })
                           say(`${x.o?.nazev}: vyfakturováno`)
                         } catch (e) {
                           say('Uložení selhalo: ' + e.message)
@@ -183,13 +183,14 @@ export default function Revize() {
                   for (const r of list) {
                     await save('revize', {
                       id: r.id,
+                      predchozi: { posledni: r.posledni, pristi: r.pristi, stav: r.stav || 'planovano' },
                       posledni: done.datum,
                       stav: done.ceka ? 'ceka_fakturace' : 'planovano',
                       pristi: r.lhuta_mesicu ? iso(addMonths(parse(done.datum), r.lhuta_mesicu)) : r.pristi,
                     })
                   }
                   setDone(null)
-                  say(list.length > 1 ? `Zapsáno ${list.length} revizí` : 'Revize zapsána')
+                  say(list.length > 1 ? `Zapsáno ${list.length} revizí. Omyl? Revizi otevřete a dejte Vrátit zápis.` : 'Revize zapsána. Omyl? Otevřete ji a dejte Vrátit zápis.')
                 } catch (e) {
                   say('Uložení selhalo: ' + e.message)
                 }
@@ -248,10 +249,28 @@ function RevizeForm({ initial, onClose, onSaved }) {
           <input className="input" type="date" value={r.pristi || ''} onChange={set('pristi')} />
         </label>
       </div>
-      <label>
-        Poznámka
-        <input className="input" value={r.poznamka || ''} onChange={set('poznamka')} />
-      </label>
+      <div className="two">
+        <label>
+          Stav
+          <select className="select" value={r.stav || 'planovano'} onChange={set('stav')}>
+            <option value="planovano">Naplánováno / vyfakturováno</option>
+            <option value="ceka_fakturace">Hotovo, čeká na fakturaci</option>
+            <option value="archiv">Vyřazeno (už se nedělá)</option>
+          </select>
+        </label>
+        <label>
+          Poznámka
+          <input className="input" value={r.poznamka || ''} onChange={set('poznamka')} />
+        </label>
+      </div>
+      {r.id && r.predchozi && (
+        <div className="panel" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="small" style={{ flex: 1 }}>
+            Před posledním zápisem: naposledy {fmtDate(r.predchozi.posledni)}, příště {fmtDate(r.predchozi.pristi)}, {r.predchozi.stav === 'ceka_fakturace' ? 'čekalo na fakturaci' : 'nevyřízeno'}.
+          </span>
+          <button className="btn ghost sm" onClick={() => setR({ ...r, ...r.predchozi, predchozi: null })}>Vrátit zápis</button>
+        </div>
+      )}
       <div className="actions">
         {r.id && (
           confirm ? (
@@ -271,7 +290,8 @@ function RevizeForm({ initial, onClose, onSaved }) {
               ...(r.id ? { id: r.id } : {}),
               objekt_id: Number(r.objekt_id), typ: r.typ, lhuta_mesicu: lh,
               cena: r.cena ? Number(r.cena) : null, posledni: r.posledni || null, pristi,
-              poznamka: r.poznamka || null,
+              poznamka: r.poznamka || null, stav: r.stav || 'planovano',
+              ...(r.id ? { predchozi: r.predchozi ?? null } : {}),
             })
             onSaved(r.id ? 'Revize uložena' : 'Revize přidána')
             onClose()

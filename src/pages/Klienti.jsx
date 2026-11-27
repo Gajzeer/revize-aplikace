@@ -171,8 +171,12 @@ function Detail({ id }) {
 }
 
 function KlientForm({ initial, onClose, onSaved }) {
-  const { save } = useData()
+  const { db, save, remove, reload } = useData()
   const [k, setK] = useState(initial)
+  const [del, setDel] = useState(false)
+  const nObj = k.id ? db.objekty.filter((o) => o.klient_id === k.id) : []
+  const nRev = db.revize.filter((r) => nObj.some((o) => o.id === r.objekt_id)).length
+  const nFak = k.id ? db.faktury.filter((f) => f.klient_id === k.id).length : 0
   const f = (key, label, type = 'text') => (
     <label>
       {label}
@@ -190,7 +194,30 @@ function KlientForm({ initial, onClose, onSaved }) {
         Poznámka
         <textarea className="input" style={{ height: 90, padding: 10 }} value={k.poznamka || ''} onChange={(e) => setK({ ...k, poznamka: e.target.value })} />
       </label>
+      {del && (
+        <div className="panel err" style={{ padding: 12 }}>
+          Smazat klienta <b>{k.nazev}</b>? Smaže se i {nObj.length} objektů, {nRev} revizí a jeho ceník.
+          {nFak > 0 && <> Jeho {nFak} faktur v evidenci zůstane, jen bez přiřazeného klienta.</>} Tento krok nejde vrátit.
+        </div>
+      )}
       <div className="actions">
+        {k.id && (del ? (
+          <button
+            className="btn danger"
+            style={{ marginRight: 'auto' }}
+            onClick={async () => {
+              for (const o of nObj) await remove('objekty', o.id)
+              await remove('klienti', k.id)
+              await reload()
+              onClose()
+              location.hash = '#/klienti'
+            }}
+          >
+            Opravdu smazat
+          </button>
+        ) : (
+          <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setDel(true)}>Smazat klienta</button>
+        ))}
         <button className="btn ghost" onClick={onClose}>Zrušit</button>
         <button className="btn" disabled={!k.nazev} onClick={async () => { const { created_at, ...row } = k; await save('klienti', row); onSaved?.(); onClose() }}>
           Uložit klienta
@@ -201,8 +228,9 @@ function KlientForm({ initial, onClose, onSaved }) {
 }
 
 function ObjektForm({ initial, onClose, onSaved }) {
-  const { save } = useData()
+  const { save, remove, reload } = useData()
   const [o, setO] = useState(initial)
+  const [del, setDel] = useState(false)
   const f = (key, label) => (
     <label>
       {label}
@@ -217,6 +245,11 @@ function ObjektForm({ initial, onClose, onSaved }) {
       <div className="two">{f('vedouci', 'Vedoucí / kontakt')}{f('telefon', 'Telefon')}</div>
       {f('poznamka', 'Poznámka')}
       <div className="actions">
+        {o.id && (del ? (
+          <button className="btn danger" style={{ marginRight: 'auto' }} onClick={async () => { await remove('objekty', o.id); await reload(); onSaved?.(); onClose() }}>Opravdu smazat i s revizemi</button>
+        ) : (
+          <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setDel(true)}>Smazat objekt</button>
+        ))}
         <button className="btn ghost" onClick={onClose}>Zrušit</button>
         <button className="btn" disabled={!o.nazev} onClick={async () => { const { created_at, rv, next, ...row } = o; await save('objekty', row); onSaved?.(); onClose() }}>
           Uložit objekt

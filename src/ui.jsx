@@ -11,6 +11,7 @@ const P = {
   check: 'M5 12.5 10 17 19 7',
   plus: 'M12 5v14M5 12h14',
   bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
+  more: 'M4 7h16M4 12h16M4 17h16',
 }
 
 export function Icon({ name, size = 20 }) {
