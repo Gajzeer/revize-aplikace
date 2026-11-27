@@ -379,3 +379,8 @@ input.r { text-align: right; }
 .main { min-width: 0; }
 @media (max-width: 720px) { .head { flex-wrap: wrap; } .sheet-wrap { margin: 0 -16px; } }
 .bar .select { min-width: 0; max-width: 100%; }
+/* Netlify vkládá vpravo dole plovoucí odznak „Powered by Netlify“ – lišta se zvedne nad něj */
+@media (max-width: 720px) {
+  .tabbar { padding-bottom: calc(62px + env(safe-area-inset-bottom)); }
+  .main { padding-bottom: 160px; }
+}
