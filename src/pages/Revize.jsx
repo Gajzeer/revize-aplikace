@@ -65,7 +65,7 @@ export default function Revize() {
             {rows.map((r) => (
               <tr key={r.id}>
                 <td>
-                  <div style={{ fontWeight: 600 }}>{r.o?.nazev}</div>
+                  <button className="link" style={{ fontWeight: 600, textAlign: 'left', color: 'var(--ink)', textDecoration: 'none' }} title="Upravit revizi" onClick={() => setEdit(r)}>{r.o?.nazev}</button>
                   <div className="small muted">{r.o?.adresa}</div>
                   <div className="small show-m" style={{ marginTop: 2 }}>{r.typ}</div>
                 </td>
@@ -122,19 +122,20 @@ export default function Revize() {
         </Modal>
       )}
 
-      {edit && <RevizeForm initial={edit} onClose={() => setEdit(null)} onSaved={() => say('Revize přidána')} />}
+      {edit && <RevizeForm initial={edit} onClose={() => setEdit(null)} onSaved={(m) => say(m)} />}
       {toast}
     </>
   )
 }
 
 function RevizeForm({ initial, onClose, onSaved }) {
-  const { db, save } = useData()
+  const { db, save, remove } = useData()
   const [r, setR] = useState(initial)
+  const [confirm, setConfirm] = useState(false)
   const set = (k) => (e) => setR({ ...r, [k]: e.target.value })
   const objekty = [...db.objekty].sort((a, b) => a.nazev.localeCompare(b.nazev, 'cs'))
   return (
-    <Modal title="Nová revize" onClose={onClose}>
+    <Modal title={r.id ? 'Upravit revizi' : 'Nová revize'} onClose={onClose}>
       <label>
         Objekt
         <select className="select" value={r.objekt_id || ''} onChange={set('objekt_id')}>
@@ -168,7 +169,18 @@ function RevizeForm({ initial, onClose, onSaved }) {
           <input className="input" type="date" value={r.pristi || ''} onChange={set('pristi')} />
         </label>
       </div>
+      <label>
+        Poznámka
+        <input className="input" value={r.poznamka || ''} onChange={set('poznamka')} />
+      </label>
       <div className="actions">
+        {r.id && (
+          confirm ? (
+            <button className="btn danger" style={{ marginRight: 'auto' }} onClick={async () => { await remove('revize', r.id); onSaved('Revize smazána'); onClose() }}>Opravdu smazat</button>
+          ) : (
+            <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setConfirm(true)}>Smazat</button>
+          )
+        )}
         <button className="btn ghost" onClick={onClose}>Zrušit</button>
         <button
           className="btn"
@@ -177,14 +189,16 @@ function RevizeForm({ initial, onClose, onSaved }) {
             const lh = r.lhuta_mesicu ? Number(r.lhuta_mesicu) : null
             const pristi = r.pristi || (r.posledni && lh ? iso(addMonths(parse(r.posledni), lh)) : null)
             await save('revize', {
+              ...(r.id ? { id: r.id } : {}),
               objekt_id: Number(r.objekt_id), typ: r.typ, lhuta_mesicu: lh,
               cena: r.cena ? Number(r.cena) : null, posledni: r.posledni || null, pristi,
+              poznamka: r.poznamka || null,
             })
-            onSaved()
+            onSaved(r.id ? 'Revize uložena' : 'Revize přidána')
             onClose()
           }}
         >
-          Přidat revizi
+          {r.id ? 'Uložit revizi' : 'Přidat revizi'}
         </button>
       </div>
     </Modal>

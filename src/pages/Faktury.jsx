@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useData } from '../data'
-import { TODAY, daysTo, fmtDate, fmtKc, iso, norm } from '../lib'
+import { TODAY, daysTo, fmtDate, fmtKc, iso, norm, supabase } from '../lib'
 import { Modal, useToast } from '../ui'
 
 function stavF(f) {
@@ -82,7 +82,7 @@ export default function Faktury({ sub }) {
               const [k, l] = stavF(f)
               return (
                 <tr key={f.id}>
-                  <td className="num" style={{ fontWeight: 650 }}>{f.cislo}</td>
+                  <td className="num"><button className="link" style={{ fontWeight: 650, color: 'var(--ink)' }} title="Otevřít fakturu" onClick={() => setNova(f)}>{f.cislo}</button></td>
                   <td className="num">{fmtDate(f.datum_vystaveni)}</td>
                   <td>{idx.klient[f.klient_id]?.zkratka || idx.klient[f.klient_id]?.nazev}</td>
                   <td className="hide-m small muted">{f.zakazka}</td>
@@ -107,19 +107,25 @@ export default function Faktury({ sub }) {
           </tbody>
         </table>
       </div>
-      {nova && <FakturaForm initial={nova} onClose={() => setNova(null)} onSaved={(c) => say(`Faktura ${c} zapsána`)} />}
+      {nova && <FakturaForm initial={nova} onClose={() => setNova(null)} onSaved={(m) => say(m)} />}
       {toast}
     </>
   )
 }
 
 function FakturaForm({ initial, onClose, onSaved }) {
-  const { db, save } = useData()
+  const { db, save, remove } = useData()
   const [f, setF] = useState(initial)
+  const [items, setItems] = useState(null)
+  const [confirm, setConfirm] = useState(false)
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
+  useEffect(() => {
+    if (!initial.id) return
+    supabase.from('polozky_faktur').select('*').eq('faktura_id', initial.id).order('id').then(({ data, error }) => setItems(error ? 'err' : data || []))
+  }, [initial.id])
   return (
-    <Modal title="Zapsat fakturu" onClose={onClose}>
-      <div className="muted small">Zápis do evidence. Tvorbu PDF faktury přidáme ve verzi 2.</div>
+    <Modal title={f.id ? `Faktura ${f.cislo}` : 'Zapsat fakturu'} onClose={onClose}>
+      {!f.id && <div className="muted small">Zápis do evidence. Tvorbu PDF faktury přidáme v další verzi.</div>}
       <div className="two">
         <label>Číslo<input className="input" value={f.cislo} onChange={set('cislo')} /></label>
         <label>
@@ -131,28 +137,60 @@ function FakturaForm({ initial, onClose, onSaved }) {
         </label>
       </div>
       <div className="two">
-        <label>Vystaveno<input className="input" type="date" value={f.datum_vystaveni} onChange={set('datum_vystaveni')} /></label>
-        <label>Splatnost<input className="input" type="date" value={f.datum_splatnosti} onChange={set('datum_splatnosti')} /></label>
+        <label>Vystaveno<input className="input" type="date" value={f.datum_vystaveni || ''} onChange={set('datum_vystaveni')} /></label>
+        <label>Splatnost<input className="input" type="date" value={f.datum_splatnosti || ''} onChange={set('datum_splatnosti')} /></label>
       </div>
       <div className="two">
-        <label>Částka (Kč)<input className="input" type="number" min="0" value={f.castka || ''} onChange={set('castka')} /></label>
+        <label>Částka (Kč)<input className="input" type="number" min="0" value={f.castka ?? ''} onChange={set('castka')} /></label>
         <label>Zakázka<input className="input" value={f.zakazka || ''} onChange={set('zakazka')} /></label>
       </div>
+      {f.id && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" checked={!!f.zaplaceno} onChange={(e) => setF({ ...f, zaplaceno: e.target.checked })} /> Zaplaceno
+        </label>
+      )}
+      {f.id && (
+        <div>
+          <div className="small" style={{ fontWeight: 600, color: 'var(--ink-2)', marginBottom: 6 }}>Položky</div>
+          {items === null && <div className="small muted">Načítám…</div>}
+          {items === 'err' && <div className="small muted">Položky se nepodařilo načíst.</div>}
+          {items?.length === 0 && <div className="small muted">Faktura nemá rozepsané položky.</div>}
+          {Array.isArray(items) && items.length > 0 && (
+            <div className="rows">
+              {items.map((it) => (
+                <div className="row" key={it.id} style={{ fontSize: 14 }}>
+                  <div>
+                    <div>{it.popis}</div>
+                    <div className="s">{[it.mnozstvi, it.cena_ks != null && `${fmtKc(it.cena_ks)}/ks`].filter(Boolean).join(' × ')}</div>
+                  </div>
+                  <div className="num">{it.celkem != null ? fmtKc(it.celkem) : ''}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {f.soubor && <div className="small faint" style={{ marginTop: 8 }}>Soubor: {f.soubor}</div>}
+        </div>
+      )}
       <div className="actions">
+        {f.id && (confirm ? (
+          <button className="btn danger" style={{ marginRight: 'auto' }} onClick={async () => { await remove('faktury', f.id); onSaved(`Faktura ${f.cislo} smazána`); onClose() }}>Opravdu smazat</button>
+        ) : (
+          <button className="btn ghost" style={{ marginRight: 'auto' }} onClick={() => setConfirm(true)}>Smazat</button>
+        ))}
         <button className="btn ghost" onClick={onClose}>Zrušit</button>
         <button
           className="btn"
-          disabled={!f.klient_id || !f.castka || !f.cislo}
+          disabled={!f.klient_id || f.castka === '' || f.castka == null || !f.cislo || !f.datum_vystaveni}
           onClick={async () => {
-            await save('faktury', { ...f, klient_id: Number(f.klient_id), castka: Number(f.castka), rok: Number(f.datum_vystaveni.slice(0, 4)) })
-            onSaved(f.cislo)
+            const { created_at, ...row } = f
+            await save('faktury', { ...row, klient_id: Number(row.klient_id), castka: Number(row.castka), rok: Number(row.datum_vystaveni.slice(0, 4)) })
+            onSaved(f.id ? `Faktura ${f.cislo} uložena` : `Faktura ${f.cislo} zapsána`)
             onClose()
           }}
         >
-          Zapsat fakturu
+          {f.id ? 'Uložit fakturu' : 'Zapsat fakturu'}
         </button>
       </div>
     </Modal>
   )
 }
-
