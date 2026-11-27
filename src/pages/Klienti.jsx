@@ -71,7 +71,7 @@ function Detail({ id }) {
     return db.objekty
       .filter((o) => o.klient_id === id && (!t || norm(`${o.nazev} ${o.adresa} ${o.vedouci}`).includes(t)))
       .map((o) => {
-        const rv = db.revize.filter((r) => r.objekt_id === o.id)
+        const rv = db.revize.filter((r) => r.objekt_id === o.id && r.stav !== 'archiv')
         const next = rv.map((r) => r.pristi).filter(Boolean).sort()[0]
         return { ...o, rv, next }
       })

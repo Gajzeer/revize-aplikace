@@ -16,6 +16,7 @@ export default function Revize() {
     const t = norm(q)
     const lim = range === 'all' ? null : range === 'late' ? iso(TODAY()) : iso(addMonths(TODAY(), range === '30' ? 1 : 3))
     return db.revize
+      .filter((r) => r.stav !== 'archiv')
       .map((r) => ({ ...r, o: idx.objekt[r.objekt_id] }))
       .filter((r) => !kl || String(r.o?.klient_id) === kl)
       .filter((r) => !lim || (r.pristi && (range === 'late' ? r.pristi < lim : r.pristi <= lim)))

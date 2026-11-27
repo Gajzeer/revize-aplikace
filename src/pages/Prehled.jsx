@@ -75,7 +75,7 @@ export default function Prehled() {
   const due = useMemo(() => {
     const lim = iso(addMonths(t, 1))
     return db.revize
-      .filter((r) => r.pristi && r.pristi <= lim)
+      .filter((r) => r.stav !== 'archiv' && r.pristi && r.pristi <= lim)
       .sort((a, b) => a.pristi.localeCompare(b.pristi))
   }, [db])
 
