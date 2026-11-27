@@ -5,6 +5,7 @@ import { Modal, useToast } from '../ui'
 import { kvGet, kvSet } from '../offline'
 import { nahratSablony, nazevSouboru, stahnoutWord, wordBlob, zdrojSablony } from '../sablony'
 import { OdeslatEmail } from '../posta'
+import { evSDatem, prepisData, prepisEv } from '../datumy'
 import { odhlasitMicrosoft, prihlasenMicrosoft, wordNaPdf } from '../pdf'
 
 export const TYPY_Z = {
@@ -196,7 +197,7 @@ export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }, zpravy = []
   const newY = datum.slice(0, 4)
   let bloky = full.bloky
   // datum revize, vypracování a předání
-  bloky = mapText(bloky, (t) => replaceDate(replaceDate(replaceDate(t, full.datum_revize, datum), full.datum_vypracovani, vyp), full.datum_predani, pred))
+  bloky = prepisData(bloky, { stara: { revize: full.datum_revize, vyp: full.datum_vypracovani, pred: full.datum_predani }, nova: { revize: datum, vyp, pred }, jen: ['revize', 'vyp', 'pred'] })
   // termín příští revize ve tvaru MM/RRRR
   if (full.datum_revize && lhuta) {
     const o = addMonths(parse(full.datum_revize), lhuta)
@@ -211,14 +212,15 @@ export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }, zpravy = []
     const m = x.t === 'p' && (x.x || '').match(/Ev(?:\.\s*č\.|idenční\s+číslo)[^:]{0,20}:\s*(\S+)/i)
     if (m) { ev = m[1]; break }
   }
+  const evStare = ev
   if (ev) {
-    const d0 = parse(full.datum_revize)
-    const d1 = parse(datum)
-    let nev = ev.split(oldY).join(newY)
-    if (d0 && d1) nev = nev.replace(`${newY}-${String(d0.getDate()).padStart(2, '0')}-${String(d0.getMonth() + 1).padStart(2, '0')}`, `${newY}-${String(d1.getDate()).padStart(2, '0')}-${String(d1.getMonth() + 1).padStart(2, '0')}`)
-    bloky = mapText(bloky, (t) => t.split(ev).join(nev))
+    let nev = evSDatem(ev, datum)
+    if (nev === ev) nev = ev.split(oldY).join(newY)
+    bloky = prepisEv(bloky, ev, nev)
     ev = nev
   }
+  // předložené dokumenty: „předchozí pravidelná revizní zpráva, vyhotovena …, ev.č: …“ = zpráva, ze které kopírujeme
+  if (full.datum_vypracovani || full.datum_revize) bloky = prepisData(bloky, { minula: { datum: full.datum_vypracovani || full.datum_revize, ev: evStare }, jen: ['minula'] })
   const nazev = oldY && newY !== oldY ? full.nazev.split(oldY).join(newY) : `${full.nazev} (nová)`
   const { data, error: e2 } = await supabase
     .from('zpravy')
@@ -273,18 +275,30 @@ function Editor({ id }) {
 
   if (!z) return <div className="muted">{meta ? `Načítám ${meta.nazev}…` : 'Načítám zprávu…'}</div>
   const set = (k) => (e) => { setZ({ ...z, [k]: e.target.value }); setDirty(true) }
+  // změna data nahoře se propíše i do textu zprávy (k řádkům „Datum vypracování“, „předal dne“ atd.)
+  const ROLE = { datum_revize: 'revize', datum_vypracovani: 'vyp', datum_predani: 'pred' }
+  const setDatum = (k) => (e) => {
+    const v = e.target.value
+    const stara = { revize: z.datum_revize, vyp: z.datum_vypracovani, pred: z.datum_predani }
+    let bloky = v ? prepisData(z.bloky, { stara, nova: { ...stara, [ROLE[k]]: v }, jen: [ROLE[k]] }) : z.bloky
+    // datum revize je i v evidenčním čísle (2026-17-09-MOL417 E-ML-R)
+    const ev = k === 'datum_revize' && v ? evSDatem(z.ev_cislo, v) : z.ev_cislo
+    if (ev !== z.ev_cislo) bloky = prepisEv(bloky, z.ev_cislo, ev)
+    setZ({ ...z, [k]: v, bloky, ev_cislo: ev })
+    setDirty(true)
+  }
   const setB = (bi, b) => { const bl = [...z.bloky]; bl[bi] = b; setZ({ ...z, bloky: bl }); setDirty(true) }
   const rev = db.revize.find((r) => r.id === z.revize_id)
   const datesFound = [...new Set([...allText(z.bloky).matchAll(RE_DATE)].map((m) => toIso(m[1], m[2], m[3])))].sort()
   const wide = Math.max(0, ...z.bloky.filter((b) => b.t === 'tab').map((b) => Math.max(...b.r.map((r) => r.reduce((a, c) => a + (c.s || 1), 0)))))
 
-  async function ulozit() {
+  async function ulozit(extra = {}) {
     setBusy(true)
-    const { created_at, ...row } = z
+    const { created_at, ...row } = { ...z, ...extra }
     const upd = { ...row, objekt_id: row.objekt_id ? Number(row.objekt_id) : null, revize_id: row.revize_id ? Number(row.revize_id) : null, updated_at: new Date().toISOString() }
     try {
       await save('zpravy', upd)
-      setZ({ ...z, updated_at: upd.updated_at })
+      setZ({ ...z, ...extra, updated_at: upd.updated_at })
       setDirty(false)
       say(navigator.onLine ? 'Zpráva uložena' : 'Uloženo v telefonu, odešle se po připojení')
     } catch (e) {
@@ -340,7 +354,10 @@ function Editor({ id }) {
           <button className="btn ghost" onClick={async () => { if (dirty) await ulozit(); setMail(true) }}>Odeslat e-mailem</button>
           <button className="btn ghost" onClick={() => { setNahled(true); setTimeout(() => { const t = document.title; document.title = z.nazev; print(); document.title = t }, 100) }}>Rychlý tisk</button>
           <button className="btn ghost" onClick={() => setNova({ datum: iso(TODAY()), vyp: iso(TODAY()), pred: iso(TODAY()), lhuta: rev?.lhuta_mesicu || 12 })}>Nová zpráva z této</button>
-          <button className="btn ghost" disabled={!dirty || busy} onClick={ulozit}>{busy ? 'Ukládám…' : dirty ? 'Uložit' : 'Uloženo'}</button>
+          {(z.stav || 'rozpracovano') === 'rozpracovano' && (
+            <button className="btn" disabled={busy} title="Uloží zprávu a změní stav z Rozpracovaná na Hotová" onClick={() => ulozit({ stav: 'hotovo' })}>Zpráva je hotová</button>
+          )}
+          <button className="btn ghost" disabled={!dirty || busy} onClick={() => ulozit()}>{busy ? 'Ukládám…' : dirty ? 'Uložit' : 'Uloženo'}</button>
         </div>
       </div>
 
@@ -361,15 +378,15 @@ function Editor({ id }) {
             </label>
           </div>
           <div className="g-four" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
-            <label>Revize provedena<input className="input" type="date" value={z.datum_revize || ''} onChange={set('datum_revize')} /></label>
+            <label>Revize provedena<input className="input" type="date" value={z.datum_revize || ''} onChange={setDatum('datum_revize')} /></label>
             <label>Objekt
               <select className="select" value={z.objekt_id || ''} onChange={set('objekt_id')}>
                 <option value="">–</option>
                 {[...db.objekty].sort((a, b) => a.nazev.localeCompare(b.nazev, 'cs')).map((o) => <option key={o.id} value={o.id}>{o.nazev}</option>)}
               </select>
             </label>
-            <label>Vypracováno<input className="input" type="date" value={z.datum_vypracovani || ''} onChange={set('datum_vypracovani')} /></label>
-            <label>Předáno<input className="input" type="date" value={z.datum_predani || ''} onChange={set('datum_predani')} /></label>
+            <label>Vypracováno<input className="input" type="date" value={z.datum_vypracovani || ''} onChange={setDatum('datum_vypracovani')} /></label>
+            <label>Předáno<input className="input" type="date" value={z.datum_predani || ''} onChange={setDatum('datum_predani')} /></label>
           </div>
           <div className="bar" style={{ marginTop: 12, marginBottom: 0 }}>
             <button className="btn ghost sm" onClick={() => setRepl({ co: '', cim: '' })}>Najít a nahradit</button>
