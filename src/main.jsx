@@ -16,6 +16,7 @@ import Kalendar from './pages/Kalendar'
 import Faktura from './pages/Faktura'
 import Zpravy from './pages/Zpravy'
 import Nabidky from './pages/Nabidky'
+import Dane from './pages/Dane'
 import { oznamitDnes, seznamUpozorneni } from './upozorneni'
 
 const PAGES = [
@@ -26,6 +27,7 @@ const PAGES = [
   { id: 'zpravy', label: 'Revizní zprávy', short: 'Zprávy', icon: 'report', C: Zpravy },
   { id: 'faktury', label: 'Faktury', icon: 'doc', C: Faktury },
   { id: 'nabidky', label: 'Cenové nabídky', short: 'Nabídky', icon: 'quote', C: Nabidky },
+  { id: 'dane', label: 'Daňové podklady', short: 'Daně', icon: 'calc', C: Dane },
   { id: 'cenik', label: 'Ceník', icon: 'tag', C: Cenik },
   { id: 'doklady', label: 'Doklady a přístroje', short: 'Doklady', icon: 'shield', C: Doklady },
 ]

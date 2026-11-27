@@ -97,7 +97,7 @@ export default function Faktury({ sub }) {
                       style={{ border: 0, cursor: 'pointer' }}
                       title={f.zaplaceno ? 'Označit jako nezaplacenou' : 'Označit jako zaplacenou'}
                       onClick={async () => {
-                        await save('faktury', { id: f.id, zaplaceno: !f.zaplaceno })
+                        await save('faktury', { id: f.id, zaplaceno: !f.zaplaceno, datum_zaplaceni: f.zaplaceno ? null : iso(TODAY()) })
                         say(f.zaplaceno ? `Faktura ${f.cislo} vrácena mezi nezaplacené` : `Faktura ${f.cislo} zaplacena`)
                       }}
                     >
@@ -149,9 +149,12 @@ function FakturaForm({ initial, onClose, onSaved }) {
         <label>Zakázka<input className="input" value={f.zakazka || ''} onChange={set('zakazka')} /></label>
       </div>
       {f.id && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="checkbox" checked={!!f.zaplaceno} onChange={(e) => setF({ ...f, zaplaceno: e.target.checked })} /> Zaplaceno
-        </label>
+        <div className="two">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, alignSelf: 'end', paddingBottom: 10 }}>
+            <input type="checkbox" checked={!!f.zaplaceno} onChange={(e) => setF({ ...f, zaplaceno: e.target.checked, datum_zaplaceni: e.target.checked ? f.datum_zaplaceni || iso(TODAY()) : null })} /> Zaplaceno
+          </label>
+          {f.zaplaceno && <label>Peníze přišly dne<input className="input" type="date" value={f.datum_zaplaceni || ''} onChange={set('datum_zaplaceni')} /></label>}
+        </div>
       )}
       {f.id && (
         <div>
@@ -188,7 +191,7 @@ function FakturaForm({ initial, onClose, onSaved }) {
           disabled={!f.klient_id || f.castka === '' || f.castka == null || !f.cislo || !f.datum_vystaveni}
           onClick={async () => {
             const { created_at, ...row } = f
-            await save('faktury', { ...row, klient_id: Number(row.klient_id), castka: Number(row.castka), rok: Number(row.datum_vystaveni.slice(0, 4)) })
+            await save('faktury', { ...row, datum_zaplaceni: row.datum_zaplaceni || null, klient_id: Number(row.klient_id), castka: Number(row.castka), rok: Number(row.datum_vystaveni.slice(0, 4)) })
             onSaved(f.id ? `Faktura ${f.cislo} uložena` : `Faktura ${f.cislo} zapsána`)
             onClose()
           }}

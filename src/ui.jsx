@@ -13,6 +13,7 @@ const P = {
   bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
   more: 'M4 7h16M4 12h16M4 17h16',
   quote: 'M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6M9 16h3',
+  calc: 'M6 3h12v18H6zM9 7h6M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h3',
   report: 'M8 4h8v3H8zM6 5.5H4.5V21h15V5.5H18M8 12l2 2 4-4M8 17.5h8',
 }
 
