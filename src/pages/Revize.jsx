@@ -263,6 +263,15 @@ function RevizeForm({ initial, onClose, onSaved }) {
           <input className="input" value={r.poznamka || ''} onChange={set('poznamka')} />
         </label>
       </div>
+      {r.id && (() => {
+        const zz = db.zpravy.filter((z) => z.revize_id === r.id).sort((a, b) => (b.datum_revize || '').localeCompare(a.datum_revize || ''))
+        return zz.length > 0 && (
+          <div className="small">
+            Revizní zprávy:{' '}
+            {zz.slice(0, 3).map((z, i) => <span key={z.id}>{i > 0 && ', '}<a href={`#/zpravy/${z.id}`}>{z.ev_cislo || z.nazev} ({fmtDate(z.datum_revize)})</a></span>)}
+          </div>
+        )
+      })()}
       {r.id && r.predchozi && (
         <div className="panel" style={{ padding: 12, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span className="small" style={{ flex: 1 }}>

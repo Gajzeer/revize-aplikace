@@ -1,0 +1,380 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useData } from '../data'
+import { TODAY, addMonths, fmtDate, iso, norm, parse, supabase } from '../lib'
+import { Modal, useToast } from '../ui'
+
+export const TYPY_Z = {
+  SP: 'Spotřebiče',
+  NO: 'Nouzové osvětlení',
+  'ML-P': 'Myčka portálová',
+  'ML-R': 'Myčka ruční',
+  'ML-PR': 'Myčky (portál + ruční)',
+  ST: 'Stavba / elektroinstalace',
+  NN: 'Elektroinstalace NN',
+  JINE: 'Jiné',
+}
+const STAVY = { rozpracovano: 'Rozpracovaná', hotovo: 'Hotová', predano: 'Předaná' }
+
+// datum v textu zprávy: 29.04.2026, 29.4.2026, 29. 4. 2026
+const RE_DATE = /\b(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})\b/g
+const toIso = (d, m, y) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+const czDate = (s) => { const d = parse(s); return d ? `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}` : '' }
+
+function mapText(bloky, fn) {
+  return bloky.map((b) => (b.t === 'p' ? { ...b, x: fn(b.x) } : { ...b, r: b.r.map((row) => row.map((c) => ({ ...c, x: fn(c.x) }))) }))
+}
+function allText(bloky) {
+  return bloky.map((b) => (b.t === 'p' ? b.x : b.r.map((r) => r.map((c) => c.x).join(' ')).join('\n'))).join('\n')
+}
+// nahradí v textu všechna data, která odpovídají staré hodnotě (v libovolném zápisu)
+function replaceDate(txt, oldIso, newIso) {
+  if (!oldIso || !newIso || oldIso === newIso) return txt
+  return txt.replace(RE_DATE, (m, d, mo, y) => (toIso(d, mo, y) === oldIso ? czDate(newIso) : m))
+}
+
+export default function Zpravy({ sub }) {
+  if (sub?.[0]) return <Editor key={sub[0]} id={Number(sub[0])} />
+  return <Seznam />
+}
+
+function Seznam() {
+  const { db, idx } = useData()
+  const [q, setQ] = useState('')
+  const [typ, setTyp] = useState('')
+  const [rok, setRok] = useState('')
+  const roky = [...new Set(db.zpravy.map((z) => (z.datum_revize || '').slice(0, 4)).filter(Boolean))].sort().reverse()
+  const list = useMemo(() => {
+    const t = norm(q)
+    return db.zpravy
+      .filter((z) => !typ || z.typ === typ)
+      .filter((z) => !rok || (z.datum_revize || '').startsWith(rok))
+      .filter((z) => !t || norm(`${z.nazev} ${z.ev_cislo} ${idx.objekt[z.objekt_id]?.nazev}`).includes(t))
+      .sort((a, b) => (b.datum_revize || '').localeCompare(a.datum_revize || '') || a.nazev.localeCompare(b.nazev, 'cs'))
+  }, [db, q, typ, rok])
+
+  return (
+    <>
+      <div className="head">
+        <div>
+          <h1>Revizní zprávy</h1>
+          <p>{db.zpravy.length} zpráv. Novou zprávu vytvoříte nejrychleji z loňské: otevřete ji a dejte „Nová zpráva z této“.</p>
+        </div>
+      </div>
+      {db.zpravy.length === 0 && (
+        <section className="panel" style={{ marginBottom: 16 }}>
+          <h2>Zatím žádné zprávy</h2>
+          <p style={{ margin: 0 }}>Vaše zprávy z roku 2026 jsou připravené v souboru <b>zpravy-2026.json</b> (složka CLAUDE\REVIZE APLIKACE). Nahrajte ho v <a href="#/import">Nahrát úpravy ze souboru</a>.</p>
+        </section>
+      )}
+      <div className="bar">
+        <input className="input" placeholder="Hledat stanici, objekt nebo číslo zprávy" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select className="select" value={typ} onChange={(e) => setTyp(e.target.value)} aria-label="Druh">
+          <option value="">Všechny druhy</option>
+          {Object.entries(TYPY_Z).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <select className="select" value={rok} onChange={(e) => setRok(e.target.value)} aria-label="Rok">
+          <option value="">Všechny roky</option>
+          {roky.map((r) => <option key={r}>{r}</option>)}
+        </select>
+      </div>
+      <div className="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Zpráva</th><th className="hide-m">Druh</th><th>Revize</th><th className="hide-m">Stav</th></tr>
+          </thead>
+          <tbody>
+            {list.length === 0 && <tr><td colSpan="4" className="muted">Nic nenalezeno.</td></tr>}
+            {list.slice(0, 300).map((z) => (
+              <tr key={z.id} style={{ cursor: 'pointer' }} onClick={() => (location.hash = `#/zpravy/${z.id}`)}>
+                <td>
+                  <a href={`#/zpravy/${z.id}`} style={{ fontWeight: 600, color: 'var(--ink)' }}>{z.nazev}</a>
+                  <div className="small muted">{[idx.objekt[z.objekt_id]?.nazev, z.ev_cislo].filter(Boolean).join(' · ')}{z.vzor ? ' · vzor' : ''}</div>
+                </td>
+                <td className="hide-m small">{TYPY_Z[z.typ] || z.typ}</td>
+                <td className="num">{fmtDate(z.datum_revize)}</td>
+                <td className="hide-m small">{STAVY[z.stav] || z.stav}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  )
+}
+
+// vytvoří kopii zprávy pro novou revizi: posune data, rok v ev. čísle a termín příští revize
+export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }) {
+  const { data: full, error } = await supabase.from('zpravy').select('*').eq('id', src.id).single()
+  if (error) throw error
+  const oldY = (full.datum_revize || '').slice(0, 4)
+  const newY = datum.slice(0, 4)
+  let bloky = full.bloky
+  // datum revize, vypracování a předání
+  bloky = mapText(bloky, (t) => replaceDate(replaceDate(replaceDate(t, full.datum_revize, datum), full.datum_vypracovani, vyp), full.datum_predani, pred))
+  // termín příští revize ve tvaru MM/RRRR
+  if (full.datum_revize && lhuta) {
+    const o = addMonths(parse(full.datum_revize), lhuta)
+    const n = addMonths(parse(datum), lhuta)
+    const f = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+    bloky = mapText(bloky, (t) => t.split(f(o)).join(f(n)))
+  }
+  // evidenční číslo
+  let ev = full.ev_cislo || ''
+  if (ev) {
+    const d0 = parse(full.datum_revize)
+    const d1 = parse(datum)
+    let nev = ev.split(oldY).join(newY)
+    if (d0 && d1) nev = nev.replace(`${newY}-${String(d0.getDate()).padStart(2, '0')}-${String(d0.getMonth() + 1).padStart(2, '0')}`, `${newY}-${String(d1.getDate()).padStart(2, '0')}-${String(d1.getMonth() + 1).padStart(2, '0')}`)
+    bloky = mapText(bloky, (t) => t.split(ev).join(nev))
+    ev = nev
+  }
+  const nazev = oldY && newY !== oldY ? full.nazev.split(oldY).join(newY) : `${full.nazev} (nová)`
+  const { data, error: e2 } = await supabase
+    .from('zpravy')
+    .insert({
+      objekt_id: full.objekt_id, revize_id: full.revize_id, typ: full.typ, nazev, ev_cislo: ev || null,
+      datum_revize: datum, datum_vypracovani: vyp, datum_predani: pred, stav: 'rozpracovano', vzor: false,
+      zdroj: `kopie zprávy ${full.nazev}`, bloky,
+    })
+    .select()
+    .single()
+  if (e2) throw e2
+  return data
+}
+
+function Editor({ id }) {
+  const { db, idx, reload, remove } = useData()
+  const meta = db.zpravy.find((z) => z.id === id)
+  const [z, setZ] = useState(null)
+  const [dirty, setDirty] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [nova, setNova] = useState(null)
+  const [repl, setRepl] = useState(null)
+  const [del, setDel] = useState(false)
+  const [nahled, setNahled] = useState(false)
+  const [toast, say] = useToast()
+
+  useEffect(() => {
+    setZ(null)
+    supabase.from('zpravy').select('*').eq('id', id).single().then(({ data, error }) => (error ? say('Zprávu se nepodařilo načíst: ' + error.message) : setZ({ ...data, bloky: data.bloky || [] })))
+  }, [id])
+  useEffect(() => {
+    const f = (e) => { if (dirty) { e.preventDefault(); e.returnValue = '' } }
+    addEventListener('beforeunload', f)
+    return () => removeEventListener('beforeunload', f)
+  }, [dirty])
+
+  if (!z) return <div className="muted">{meta ? `Načítám ${meta.nazev}…` : 'Načítám zprávu…'}</div>
+  const set = (k) => (e) => { setZ({ ...z, [k]: e.target.value }); setDirty(true) }
+  const setB = (bi, b) => { const bl = [...z.bloky]; bl[bi] = b; setZ({ ...z, bloky: bl }); setDirty(true) }
+  const rev = db.revize.find((r) => r.id === z.revize_id)
+  const datesFound = [...new Set([...allText(z.bloky).matchAll(RE_DATE)].map((m) => toIso(m[1], m[2], m[3])))].sort()
+  const wide = Math.max(0, ...z.bloky.filter((b) => b.t === 'tab').map((b) => Math.max(...b.r.map((r) => r.reduce((a, c) => a + (c.s || 1), 0)))))
+
+  async function ulozit() {
+    setBusy(true)
+    const { id: _id, created_at, ...row } = z
+    const { error } = await supabase.from('zpravy').update({ ...row, objekt_id: row.objekt_id ? Number(row.objekt_id) : null, revize_id: row.revize_id ? Number(row.revize_id) : null, updated_at: new Date().toISOString() }).eq('id', z.id)
+    setBusy(false)
+    if (error) return say('Uložení selhalo: ' + error.message)
+    setDirty(false)
+    say('Zpráva uložena')
+    reload()
+  }
+
+  return (
+    <>
+      <div className="head no-print">
+        <div>
+          <h1 style={{ fontSize: 26 }}>{z.nazev}</h1>
+          <p>{[idx.objekt[z.objekt_id]?.nazev, TYPY_Z[z.typ], z.ev_cislo].filter(Boolean).join(' · ')}</p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn ghost" onClick={() => setNahled(!nahled)}>{nahled ? 'Upravovat' : 'Náhled'}</button>
+          <button className="btn ghost" onClick={() => { setNahled(true); setTimeout(() => { const t = document.title; document.title = z.nazev; print(); document.title = t }, 100) }}>Tisk / PDF</button>
+          <button className="btn ghost" onClick={() => setNova({ datum: iso(TODAY()), vyp: iso(TODAY()), pred: iso(TODAY()), lhuta: rev?.lhuta_mesicu || 12 })}>Nová zpráva z této</button>
+          <button className="btn" disabled={!dirty || busy} onClick={ulozit}>{busy ? 'Ukládám…' : dirty ? 'Uložit' : 'Uloženo'}</button>
+        </div>
+      </div>
+
+      {!nahled && (
+        <section className="panel no-print" style={{ marginBottom: 16 }}>
+          <div className="g-four" style={{ gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)' }}>
+            <label>Název<input className="input" value={z.nazev} onChange={set('nazev')} /></label>
+            <label>Ev. číslo<input className="input" value={z.ev_cislo || ''} onChange={set('ev_cislo')} /></label>
+            <label>Druh
+              <select className="select" value={z.typ || ''} onChange={set('typ')}>
+                {Object.entries(TYPY_Z).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+            <label>Stav
+              <select className="select" value={z.stav || 'rozpracovano'} onChange={set('stav')}>
+                {Object.entries(STAVY).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="g-four" style={{ marginTop: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+            <label>Revize provedena<input className="input" type="date" value={z.datum_revize || ''} onChange={set('datum_revize')} /></label>
+            <label>Objekt
+              <select className="select" value={z.objekt_id || ''} onChange={set('objekt_id')}>
+                <option value="">–</option>
+                {[...db.objekty].sort((a, b) => a.nazev.localeCompare(b.nazev, 'cs')).map((o) => <option key={o.id} value={o.id}>{o.nazev}</option>)}
+              </select>
+            </label>
+            <label>Vypracováno<input className="input" type="date" value={z.datum_vypracovani || ''} onChange={set('datum_vypracovani')} /></label>
+            <label>Předáno<input className="input" type="date" value={z.datum_predani || ''} onChange={set('datum_predani')} /></label>
+          </div>
+          <div className="bar" style={{ marginTop: 12, marginBottom: 0 }}>
+            <button className="btn ghost sm" onClick={() => setRepl({ co: '', cim: '' })}>Najít a nahradit</button>
+            <button className="btn ghost sm" onClick={() => setRepl({ dates: Object.fromEntries(datesFound.map((d) => [d, d])) })}>Změnit data v textu ({datesFound.length})</button>
+            {z.zdroj && <span className="small faint" style={{ alignSelf: 'center' }}>Zdroj: {z.zdroj}</span>}
+            <span style={{ marginLeft: 'auto' }} />
+            {del ? (
+              <button className="btn danger sm" onClick={async () => { await remove('zpravy', z.id); location.hash = '#/zpravy' }}>Opravdu smazat zprávu</button>
+            ) : (
+              <button className="btn ghost sm" onClick={() => setDel(true)}>Smazat</button>
+            )}
+          </div>
+        </section>
+      )}
+
+      <style>{`@media print { @page { size: A4 ${wide > 10 ? 'landscape' : 'portrait'}; margin: 12mm 12mm 14mm; } }`}</style>
+      <div className="sheet-wrap">
+        <article className={`sheet rz ${wide > 10 ? 'land' : ''} ${nahled ? 'view' : 'edit'}`}>
+          {z.bloky.map((b, bi) =>
+            b.t === 'p' ? (
+              nahled ? (
+                <p key={bi} className={`rz-p ${b.b ? 'b' : ''} ${b.a || ''}`}>{b.x}</p>
+              ) : (
+                <textarea
+                  key={bi}
+                  className={`rz-p rz-in ${b.b ? 'b' : ''} ${b.a || ''}`}
+                  value={b.x}
+                  rows={Math.max(1, Math.ceil(b.x.length / 95) + (b.x.match(/\n/g) || []).length)}
+                  onChange={(e) => setB(bi, { ...b, x: e.target.value })}
+                />
+              )
+            ) : (
+              <TabBlok key={bi} b={b} edit={!nahled} onChange={(nb) => setB(bi, nb)} />
+            )
+          )}
+        </article>
+      </div>
+
+      {nova && (
+        <Modal title="Nová zpráva z této" onClose={() => setNova(null)}>
+          <div className="muted small">Zkopíruje celou zprávu. Data a evidenční číslo se posunou, termín příští revize se přepočítá. Naměřené hodnoty pak jen přepíšete.</div>
+          <div className="two">
+            <label>Revize provedena<input className="input" type="date" value={nova.datum} onChange={(e) => setNova({ ...nova, datum: e.target.value })} /></label>
+            <label>Lhůta (měsíce)<input className="input" type="number" value={nova.lhuta} onChange={(e) => setNova({ ...nova, lhuta: Number(e.target.value) })} /></label>
+          </div>
+          <div className="two">
+            <label>Vypracováno<input className="input" type="date" value={nova.vyp} onChange={(e) => setNova({ ...nova, vyp: e.target.value })} /></label>
+            <label>Předáno<input className="input" type="date" value={nova.pred} onChange={(e) => setNova({ ...nova, pred: e.target.value })} /></label>
+          </div>
+          <div className="actions">
+            <button className="btn ghost" onClick={() => setNova(null)}>Zrušit</button>
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  const n = await novaZeZpravy(z, nova)
+                  await reload()
+                  setNova(null)
+                  location.hash = `#/zpravy/${n.id}`
+                } catch (e) {
+                  say('Nepodařilo se: ' + e.message)
+                }
+                setBusy(false)
+              }}
+            >
+              Vytvořit zprávu
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {repl && !repl.dates && (
+        <Modal title="Najít a nahradit v celé zprávě" onClose={() => setRepl(null)}>
+          <label>Najít<input className="input" autoFocus value={repl.co} onChange={(e) => setRepl({ ...repl, co: e.target.value })} /></label>
+          <label>Nahradit za<input className="input" value={repl.cim} onChange={(e) => setRepl({ ...repl, cim: e.target.value })} /></label>
+          <div className="small muted">Nalezeno: {repl.co ? allText(z.bloky).split(repl.co).length - 1 : 0}×</div>
+          <div className="actions">
+            <button className="btn ghost" onClick={() => setRepl(null)}>Zrušit</button>
+            <button className="btn" disabled={!repl.co} onClick={() => { setZ({ ...z, bloky: mapText(z.bloky, (t) => t.split(repl.co).join(repl.cim)) }); setDirty(true); setRepl(null) }}>Nahradit vše</button>
+          </div>
+        </Modal>
+      )}
+      {repl?.dates && (
+        <Modal title="Data ve zprávě" onClose={() => setRepl(null)}>
+          <div className="muted small">Každé datum, které se ve zprávě objevuje. Změňte, co je potřeba, a všechny výskyty se přepíšou.</div>
+          <div style={{ display: 'grid', gap: 8, maxHeight: '50vh', overflow: 'auto' }}>
+            {Object.keys(repl.dates).map((d) => (
+              <label key={d} style={{ display: 'grid', gridTemplateColumns: '110px 1fr', alignItems: 'center', gap: 10 }}>
+                <span className="num">{fmtDate(d)}</span>
+                <input className="input" type="date" value={repl.dates[d]} onChange={(e) => setRepl({ dates: { ...repl.dates, [d]: e.target.value } })} />
+              </label>
+            ))}
+          </div>
+          <div className="actions">
+            <button className="btn ghost" onClick={() => setRepl(null)}>Zrušit</button>
+            <button
+              className="btn"
+              onClick={() => {
+                let bl = z.bloky
+                Object.entries(repl.dates).forEach(([o, n]) => { if (n && o !== n) bl = mapText(bl, (t) => replaceDate(t, o, n)) })
+                setZ({ ...z, bloky: bl })
+                setDirty(true)
+                setRepl(null)
+              }}
+            >
+              Přepsat data
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast}
+    </>
+  )
+}
+
+function TabBlok({ b, edit, onChange }) {
+  const setCell = (ri, ci, x) => onChange({ ...b, r: b.r.map((row, i) => (i === ri ? row.map((c, j) => (j === ci ? { ...c, x } : c)) : row)) })
+  // řádek tabulky s měřením: kopie posledního (pro nový spotřebič / obvod)
+  const addRow = (ri) => {
+    const src = b.r[ri]
+    const nr = src.map((c, j) => ({ ...c, x: j === 0 && /^\d+$/.test(c.x) ? String(Number(c.x) + 1) : '' }))
+    const r = [...b.r]
+    r.splice(ri + 1, 0, nr)
+    onChange({ ...b, r })
+  }
+  const delRow = (ri) => onChange({ ...b, r: b.r.filter((_, i) => i !== ri) })
+  const cols = Math.max(...b.r.map((r) => r.reduce((a, c) => a + (c.s || 1), 0)))
+  return (
+    <table className={`rz-tab ${cols > 10 ? 'dense' : ''}`}>
+      <tbody>
+        {b.r.map((row, ri) => (
+          <tr key={ri}>
+            {row.map((c, ci) => (
+              <td key={ci} colSpan={c.s || 1}>
+                {edit ? (
+                  <textarea className="rz-cell" value={c.x} rows={Math.max(1, (c.x.match(/\n/g) || []).length + 1)} onChange={(e) => setCell(ri, ci, e.target.value)} />
+                ) : (
+                  <span style={{ whiteSpace: 'pre-line' }}>{c.x}</span>
+                )}
+              </td>
+            ))}
+            {edit && (
+              <td className="rz-rowtools no-print">
+                <button title="Přidat řádek pod" onClick={() => addRow(ri)}>+</button>
+                {b.r.length > 1 && <button title="Smazat řádek" onClick={() => delRow(ri)}>×</button>}
+              </td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}

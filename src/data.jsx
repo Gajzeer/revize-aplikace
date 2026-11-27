@@ -3,12 +3,14 @@ import { supabase, daysTo, norm } from './lib'
 
 const Ctx = createContext(null)
 const TABLES = ['klienti', 'objekty', 'revize', 'faktury', 'cenik', 'doklady', 'pristroje']
-const OPTIONAL = ['udalosti', 'nastaveni'] // novější tabulky: když chybí, aplikace běží dál
+const OPTIONAL = ['udalosti', 'nastaveni', 'zpravy']
+// u zpráv se obsah (bloky) načítá až při otevření
+const COLS = { zpravy: 'id,objekt_id,revize_id,typ,nazev,ev_cislo,datum_revize,datum_vypracovani,datum_predani,stav,vzor,zdroj,updated_at' } // novější tabulky: když chybí, aplikace běží dál
 
 async function loadAll() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has('demo')) {
     const f = Object.values(import.meta.glob('./demo.json'))[0]
-    if (f) return { udalosti: [], nastaveni: [], ...(await f()).default }
+    if (f) return { udalosti: [], nastaveni: [], zpravy: [], ...(await f()).default }
   }
   const out = {}
   await Promise.all([
@@ -18,7 +20,7 @@ async function loadAll() {
       out[t] = data
     }),
     ...OPTIONAL.map(async (t) => {
-      const { data, error } = await supabase.from(t).select('*').order('id').range(0, 4999)
+      const { data, error } = await supabase.from(t).select(COLS[t] || '*').order('id').range(0, 4999)
       out[t] = error ? [] : data
     }),
   ])

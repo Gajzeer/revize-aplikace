@@ -25,6 +25,29 @@ export default function Import() {
     setErr(null); setLog([]); setBusy(true)
     try {
       const d = JSON.parse(await file.text())
+      if (d.zpravy) {
+        // revizní zprávy převedené z Wordu: přiřadí se k objektu (kód stanice MOL) a k revizi podle druhu
+        const TYP_REV = { SP: 'Elektrické spotřebiče', NO: 'Nouzové osvětlení', 'ML-P': 'Myčka portálová', 'ML-PR': 'Myčka portálová', 'ML-R': 'Myčka ruční', ST: 'Elektroinstalace stavby ČS' }
+        const uz = new Set(db.zpravy.map((z) => z.zdroj))
+        const rows = d.zpravy.filter((z) => !uz.has(z.zdroj)).map(({ kod, klient, ...z }) => {
+          let o = null
+          if (kod) o = db.objekty.find((x) => x.klient_id === 3 && x.nazev.startsWith(`MOL ${kod} `))
+          else if (klient === 1) o = db.objekty.find((x) => x.id === 86)
+          const r = o && db.revize.find((x) => x.objekt_id === o.id && x.stav !== 'archiv' && x.typ === TYP_REV[z.typ])
+          return { ...z, objekt_id: o?.id ?? null, revize_id: r?.id ?? null }
+        })
+        if (d.zpravy.length - rows.length) add(`Přeskočeno (už nahrané): ${d.zpravy.length - rows.length}`)
+        for (let i = 0; i < rows.length; i += 20) {
+          const { error } = await supabase.from('zpravy').insert(rows.slice(i, i + 20))
+          if (error) throw new Error(`zpravy: ${error.message}`)
+          setLog((l) => [...l.filter((x) => !x.startsWith('Nahráno zpráv')), `Nahráno zpráv: ${Math.min(i + 20, rows.length)} z ${rows.length}`])
+        }
+        add(`Přiřazeno k objektu: ${rows.filter((r) => r.objekt_id).length}, k revizi: ${rows.filter((r) => r.revize_id).length}`)
+        add('Hotovo.')
+        await reload()
+        setBusy(false)
+        return
+      }
       if (d.aktualizace || d.smazat || d.vlozit) {
         // smazání a vložení řádků: { smazat: [{ tabulka, kde: {sloupec: hodnota} }], vlozit: [{ tabulka, radky: [...] }] }
         for (const x of d.smazat || []) {

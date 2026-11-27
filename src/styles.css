@@ -423,3 +423,27 @@ input.r { text-align: right; }
 .panel > h2 .select { flex: none; width: auto; }
 @media (max-width: 720px) { .yrbar { grid-template-columns: 40px minmax(0, 1fr) 96px; } .fin-kpi b { font-size: 19px; } }
 .row.money-total { border-top: 2px solid var(--ink); font-weight: 750; font-size: 17px; padding-top: 10px; }
+/* Revizní zprávy */
+.rz { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; line-height: 1.35; }
+.rz.land { width: 297mm; min-height: 210mm; }
+.rz-p { display: block; width: 100%; margin: 0 0 1.5mm; white-space: pre-wrap; min-height: 1em; }
+.rz-p.b { font-weight: 700; }
+.rz-p.c { text-align: center; }
+.rz-p.r { text-align: right; }
+.rz-in { font: inherit; color: inherit; border: 1px solid transparent; border-radius: 3px; padding: 1px 3px; resize: none; overflow: hidden; background: transparent; }
+.rz-in:hover { border-color: #ddd; }
+.rz-in:focus { outline: none; border-color: var(--accent, #2563eb); background: #fffbea; }
+.rz-tab { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; table-layout: auto; }
+.rz-tab td { border: 1px solid #555; padding: 1mm 1.4mm; vertical-align: top; font-size: inherit; }
+.rz-tab.dense { font-size: 7.5pt; }
+.rz-tab.dense td { padding: .6mm .8mm; }
+.rz.edit .rz-tab td { padding: 0; }
+.rz-cell { display: block; width: 100%; min-width: 3.5em; font: inherit; color: inherit; border: 0; padding: 1mm 1.2mm; resize: none; background: transparent; }
+.rz-cell:focus { outline: 2px solid var(--accent, #2563eb); background: #fffbea; }
+.rz-tab td.rz-rowtools { border: 0; padding: 0 0 0 4px; white-space: nowrap; width: 1%; vertical-align: middle; }
+.rz-rowtools button { border: 1px solid #ccc; background: #fff; border-radius: 4px; width: 22px; height: 22px; line-height: 1; cursor: pointer; margin-right: 2px; color: #333; }
+@media print {
+  .backbtn { display: none !important; }
+  .sheet.rz { width: auto; min-height: 0; padding: 0; }
+  .rz-tab tr { break-inside: avoid; }
+}
