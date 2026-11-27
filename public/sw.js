@@ -1,12 +1,12 @@
 // Service worker: aplikace se otevře i bez signálu. Data se sem neukládají (ta drží IndexedDB v aplikaci).
-const CACHE = 'revize-app-v2'
+const CACHE = 'revize-app-v3'
 self.addEventListener('install', (e) => {
   // uloží stránku i soubory aplikace, na které odkazuje (skripty, styly)
   e.waitUntil(
     caches.open(CACHE).then(async (c) => {
-      await c.addAll(['/', '/manifest.webmanifest', '/icon.svg'])
-      const html = await (await c.match('/')).text()
-      const files = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1])
+      await c.addAll(['./', 'manifest.webmanifest', 'icon.svg'])
+      const html = await (await c.match('./')).text()
+      const files = [...html.matchAll(/(?:src|href)="((?:\.\/|\/)?assets\/[^"]+)"/g)].map((m) => m[1])
       await c.addAll(files)
     }).then(() => self.skipWaiting())
   )
@@ -25,8 +25,8 @@ self.addEventListener('fetch', (e) => {
     // stránka: vždy čerstvá ze sítě, bez signálu poslední uložená
     e.respondWith(
       fetch(req)
-        .then((r) => { const c = r.clone(); caches.open(CACHE).then((x) => x.put('/', c)); return r })
-        .catch(() => caches.match('/', { ignoreVary: true }))
+        .then((r) => { const c = r.clone(); caches.open(CACHE).then((x) => x.put('./', c)); return r })
+        .catch(() => caches.match('./', { ignoreVary: true }))
     )
     return
   }

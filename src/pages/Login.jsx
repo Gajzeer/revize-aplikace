@@ -19,7 +19,7 @@ export default function Login() {
     const { error, data } = await fn.call(supabase.auth, {
       email: email.trim(),
       password: pass,
-      options: { emailRedirectTo: location.origin },
+      options: { emailRedirectTo: location.origin + location.pathname },
     })
     setBusy(false)
     if (error) {

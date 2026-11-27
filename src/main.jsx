@@ -166,7 +166,7 @@ function App() {
 }
 
 // aplikace se otevře i bez signálu (uložené soubory aplikace v telefonu)
-if ('serviceWorker' in navigator && import.meta.env.PROD) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}))
+if ('serviceWorker' in navigator && import.meta.env.PROD) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}))
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
