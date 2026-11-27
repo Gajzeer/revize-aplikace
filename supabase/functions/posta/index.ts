@@ -7,6 +7,7 @@
 import nodemailer from 'npm:nodemailer@6.9.16'
 import { createClient } from 'npm:@supabase/supabase-js@2.49.1'
 import { createRemoteJWKSet, jwtVerify } from 'npm:jose@5.9.6'
+import { vytvorSouhrn } from './souhrn.js'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -33,8 +34,6 @@ async function transport() {
   }
 }
 
-const kc = (n: number) => `${Math.round(n).toLocaleString('cs-CZ')} Kč`
-const d = (s: string) => (s ? `${Number(s.slice(8, 10))}. ${Number(s.slice(5, 7))}.` : '')
 
 // token, který GitHub Actions vydá běhu workflow: musí být z Pavlova repa a z hlavní větve
 const GH = createRemoteJWKSet(new URL('https://token.actions.githubusercontent.com/.well-known/jwks'))
@@ -50,8 +49,6 @@ async function souhrn() {
   const dnes = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Prague' }))
   const iso = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`
   const T = iso(dnes)
-  const za14 = iso(new Date(dnes.getTime() + 14 * 864e5))
-  const konecRoku = `${dnes.getFullYear()}-12-31`
   const [ud, rv, fa, ob, kl, zp] = await Promise.all([
     db.from('udalosti').select('datum,cas,nazev,hotovo,objekt_id').gte('datum', T).lte('datum', iso(new Date(dnes.getTime() + 864e5))),
     db.from('revize').select('id,objekt_id,typ,pristi,cena,stav,posledni').neq('stav', 'archiv'),
@@ -61,38 +58,7 @@ async function souhrn() {
     db.from('zpravy').select('nazev,stav').eq('stav', 'rozpracovano'),
   ])
   for (const r of [ud, rv, fa, ob, kl, zp]) if (r.error) throw r.error
-  const O = Object.fromEntries(ob.data!.map((o) => [o.id, o]))
-  const K = Object.fromEntries(kl.data!.map((k) => [k.id, k]))
-  const rok = String(dnes.getFullYear())
-  const aktivni = rv.data!.filter((r) => r.stav !== 'ceka_fakturace')
-  const poTerminu = aktivni.filter((r) => r.pristi && r.pristi < T && !(r.posledni || '').startsWith(rok))
-  const brzy = aktivni.filter((r) => r.pristi && r.pristi >= T && r.pristi <= za14)
-  const doKonce = aktivni.filter((r) => r.pristi && r.pristi <= konecRoku && !(r.posledni || '').startsWith(rok))
-  const cekaFakt = rv.data!.filter((r) => r.stav === 'ceka_fakturace')
-  const nezapl = fa.data!.filter((f) => !f.zaplaceno)
-  const poSplat = nezapl.filter((f) => f.datum_splatnosti && f.datum_splatnosti < T)
-  const sum = (l: { castka?: number; cena?: number }[]) => l.reduce((a, x) => a + Number(x.castka ?? x.cena ?? 0), 0)
-  const st = (l: { objekt_id: number }[]) => [...new Set(l.map((r) => O[r.objekt_id]?.nazev || '?'))]
-
-  const r: string[] = []
-  const dnesUd = ud.data!.filter((u) => !u.hotovo)
-  r.push(`DNES ${dnes.getDate()}. ${dnes.getMonth() + 1}. ${dnes.getFullYear()}`)
-  if (dnesUd.length) dnesUd.sort((a, b) => (a.datum + (a.cas || '')).localeCompare(b.datum + (b.cas || ''))).forEach((u) => r.push(`• ${u.datum === T ? '' : 'zítra '}${u.cas ? u.cas + ' ' : ''}${u.nazev}${u.objekt_id && O[u.objekt_id] ? ' – ' + O[u.objekt_id].nazev : ''}`))
-  else r.push('• V kalendáři na dnes a zítra nic není.')
-  r.push('')
-  r.push('REVIZE')
-  if (poTerminu.length) r.push(`• Po termínu: ${poTerminu.length} (${st(poTerminu).slice(0, 8).join(', ')}${st(poTerminu).length > 8 ? '…' : ''})`)
-  if (brzy.length) r.push(`• Do 14 dnů: ${brzy.length} (${brzy.sort((a, b) => a.pristi.localeCompare(b.pristi)).slice(0, 8).map((x) => `${O[x.objekt_id]?.nazev || '?'} ${x.typ} ${d(x.pristi)}`).join(', ')})`)
-  r.push(`• Do konce roku zbývá ${doKonce.length} revizí na ${st(doKonce).length} místech, celkem ${kc(sum(doKonce))}`)
-  if (zp.data!.length) r.push(`• Rozpracované zprávy: ${zp.data!.length}`)
-  r.push('')
-  r.push('PENÍZE VE HŘE')
-  r.push(`• Hotovo, čeká na fakturaci: ${cekaFakt.length} revizí, ${kc(sum(cekaFakt))}`)
-  r.push(`• Nezaplacené faktury: ${nezapl.length}, ${kc(sum(nezapl))}`)
-  if (poSplat.length) poSplat.sort((a, b) => a.datum_splatnosti.localeCompare(b.datum_splatnosti)).slice(0, 10).forEach((f) => r.push(`   – ${f.cislo} ${K[f.klient_id]?.zkratka || K[f.klient_id]?.nazev || ''} ${kc(f.castka)}, splatná ${d(f.datum_splatnosti)}`))
-  r.push('')
-  r.push('Aplikace: https://gajzeer.github.io/revize-aplikace/')
-  return { subject: `Ráno ${dnes.getDate()}. ${dnes.getMonth() + 1}.: ${dnesUd.length ? dnesUd.length + '× v kalendáři, ' : ''}${poTerminu.length + brzy.length} revizí na řadě, ${kc(sum(cekaFakt) + sum(nezapl))} ve hře`, text: r.join('\n') }
+  return vytvorSouhrn({ ud: ud.data!, rv: rv.data!, fa: fa.data!, ob: ob.data!, kl: kl.data!, zp: zp.data! }, dnes)
 }
 
 Deno.serve(async (req) => {
@@ -106,7 +72,7 @@ Deno.serve(async (req) => {
       if (!ok) return json({ error: 'Neověřené spuštění souhrnu.' }, 401)
       const s = await souhrn()
       const { t, from, user } = await transport()
-      await t.sendMail({ from, to: env('SOUHRN_TO') || user, subject: s.subject, text: s.text })
+      await t.sendMail({ from, to: env('SOUHRN_TO') || user, subject: s.subject, text: s.text, html: s.html })
       return json({ ok: true })
     }
     // jen přihlášený majitel aplikace
