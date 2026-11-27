@@ -12,7 +12,7 @@ export async function odeslatEmail({ to, cc, subject, text, prilohy = [], kopieM
   if (error) {
     let msg = error.message
     try { msg = (await error.context.json()).error || msg } catch { /* bez těla */ }
-    if (/SMTP_USER|SMTP_PASS/.test(msg)) msg = 'Posílání ještě není nastavené: v Supabase chybí přístup ke schránce (SMTP_USER a SMTP_PASS).'
+    if (/SMTP_USER|SMTP_PASS/.test(msg)) msg = 'Posílání ještě není nastavené: v Supabase chybí heslo ke schránce (SMTP_PASS v Edge Functions → Secrets).'
     else if (/Invalid login|535|auth/i.test(msg)) msg = 'Schránka odmítla přihlášení. Zkontrolujte heslo pro aplikace (SMTP_PASS) v Supabase.'
     else if (/Failed to send a request|fetch/i.test(msg)) msg = 'Bez připojení k internetu e-mail odeslat nejde.'
     throw new Error(msg)

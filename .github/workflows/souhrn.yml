@@ -1,17 +1,18 @@
-# Ranní souhrn e-mailem: každý den v 6:00 (v létě v 7:00) zavolá funkci posta v Supabase
+# Ranní souhrn e-mailem: každý den v 6:00 (v létě v 7:00) zavolá funkci posta v Supabase.
+# Ověření bez hesla: GitHub vydá běhu podepsaný token (OIDC), funkce ověří, že je z tohoto repa.
 name: Ranní souhrn
 on:
   schedule:
     - cron: '0 5 * * *'
   workflow_dispatch:
+permissions:
+  id-token: write
 jobs:
   souhrn:
     runs-on: ubuntu-latest
     steps:
       - name: Odeslat souhrn
-        env:
-          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
         run: |
-          if [ -z "$CRON_TOKEN" ]; then echo "Chybí secret CRON_TOKEN"; exit 1; fi
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=revize-souhrn" | jq -r .value)
           curl -sS --fail-with-body -X POST https://proddwpjcpceaodbmxvp.supabase.co/functions/v1/posta \
-            -H "Content-Type: application/json" -H "x-cron-token: $CRON_TOKEN" -d '{"souhrn":true}'
+            -H "Content-Type: application/json" -H "x-github-oidc: $TOKEN" -d '{"souhrn":true}'
