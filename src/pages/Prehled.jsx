@@ -91,6 +91,10 @@ export default function Prehled() {
   }, [db])
 
   const mol = useMemo(() => molRok(db, Y), [db, Y])
+  const plan = useMemo(() => {
+    const lim = iso(new Date(t.getTime() + 14 * 864e5))
+    return db.udalosti.filter((u) => !u.hotovo && u.datum >= iso(t) && u.datum <= lim).sort((a, b) => (a.datum + (a.cas || '')).localeCompare(b.datum + (b.cas || '')))
+  }, [db])
   const fak = useMemo(() => cekaFakturace(db), [db])
   const delta = s.prevToDate ? Math.round(((s.total - s.prevToDate) / s.prevToDate) * 100) : null
   const late = due.filter((r) => daysTo(r.pristi) < 0).length
@@ -180,6 +184,22 @@ export default function Prehled() {
                 </div>
                 <div className="num" style={{ textAlign: 'right' }}>{fmtKc(mol.sumZ)}</div>
               </div>
+            </div>
+          </section>
+
+          <section className="panel">
+            <h2>Příštích 14 dní v kalendáři<a href="#/kalendar">Kalendář</a></h2>
+            {plan.length === 0 && <div className="empty">Nic zapsaného. <a href="#/kalendar">Zapsat do kalendáře</a></div>}
+            <div className="rows">
+              {plan.slice(0, 8).map((u) => (
+                <div className="row" key={u.id}>
+                  <div>
+                    <div className="t"><span className={`dot dot-${u.typ}`} />{u.nazev}</div>
+                    <div className="s">{parse(u.datum).toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' })}{u.cas ? ` v ${u.cas}` : ''}{u.objekt_id && idx.objekt[u.objekt_id] ? ` · ${idx.objekt[u.objekt_id].nazev}` : ''}</div>
+                  </div>
+                  <Due date={u.datum} showDate={false} />
+                </div>
+              ))}
             </div>
           </section>
 

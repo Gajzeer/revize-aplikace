@@ -25,6 +25,17 @@ export default function Import() {
     setErr(null); setLog([]); setBusy(true)
     try {
       const d = JSON.parse(await file.text())
+      if (d.aktualizace || d.smazat || d.vlozit) {
+        // smazání a vložení řádků: { smazat: [{ tabulka, kde: {sloupec: hodnota} }], vlozit: [{ tabulka, radky: [...] }] }
+        for (const x of d.smazat || []) {
+          let q = supabase.from(x.tabulka).delete()
+          for (const [k, v] of Object.entries(x.kde)) q = q.eq(k, v)
+          const { error } = await q
+          if (error) throw new Error(`${x.tabulka}: ${error.message}`)
+          add(`Smazáno: ${x.popis || x.tabulka}`)
+        }
+        for (const x of d.vlozit || []) await ins(x.tabulka, x.radky, add)
+      }
       if (d.aktualizace) {
         // dávka úprav připravená Claudem: [{ tabulka, id, zmeny }]
         for (const u of d.aktualizace) {
@@ -32,6 +43,12 @@ export default function Import() {
           if (error) throw new Error(`${u.tabulka} ${u.id}: ${error.message}`)
         }
         add(`Upraveno záznamů: ${d.aktualizace.length}`)
+        add('Hotovo.')
+        await reload()
+        setBusy(false)
+        return
+      }
+      if (d.smazat || d.vlozit) {
         add('Hotovo.')
         await reload()
         setBusy(false)

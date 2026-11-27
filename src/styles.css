@@ -91,7 +91,8 @@ h3 { font-size: 15px; font-weight: 700; font-variation-settings: 'wdth' 105; }
 .grid { display: grid; gap: 18px; }
 .g-dash { grid-template-columns: 1.35fr 1fr; align-items: start; }
 .g-two { grid-template-columns: 1fr 1fr; align-items: start; }
-.stack { display: grid; gap: 18px; }
+.panel .g-two { display: grid; gap: 12px; }
+.stack { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
 
 /* revize po objektech */
 .objlist { display: grid; gap: 8px; }
@@ -243,11 +244,11 @@ tr.click { cursor: pointer; }
   .earn { grid-template-columns: 1fr; gap: 14px; }
   .earn .big { font-size: 40px; }
   .tabbar {
-    display: grid; grid-template-columns: repeat(5, 1fr);
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     background: var(--ink); padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
   }
-  .tabbar a { display: grid; justify-items: center; gap: 2px; font-size: 11px; color: #b9bfbb; text-decoration: none; padding: 4px 0; border-radius: 8px; }
+  .tabbar a { display: grid; justify-items: center; gap: 2px; font-size: 10.5px; min-width: 0; color: #b9bfbb; text-decoration: none; padding: 4px 0; border-radius: 8px; }
   .tabbar a.on { color: #fff; background: #2a3036; }
   .tabbar a.on svg { color: var(--ochre); }
   .login { grid-template-columns: 1fr; }
@@ -283,3 +284,98 @@ tr.click { cursor: pointer; }
 .sumcard .sc-s { font-size: 12.5px; color: var(--ink-2); }
 .obj-rev.wait { background: color-mix(in srgb, var(--ochre) 10%, transparent); border-radius: 6px; }
 @media (max-width: 720px) { .sumcards { grid-template-columns: 1fr; } }
+
+/* kalendář */
+.cal-bar { align-items: center; }
+.cal-title { margin: 0 0 0 8px; font-size: 20px; text-transform: none; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--line); gap: 1px; }
+.cal-dn { background: var(--paper); padding: 6px 8px; font-size: 12.5px; font-weight: 650; color: var(--ink-2); }
+.cal-day { background: var(--surface); padding: 6px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; min-width: 0; }
+.cal-day:hover { background: #fafaf8; }
+.cal-day.we { background: #fbfbfa; }
+.cal-day.out { background: var(--paper); }
+.cal-day.out .cal-num { color: var(--ink-3); }
+.cal-num { font-size: 13px; font-weight: 650; align-self: flex-start; min-width: 24px; height: 24px; display: grid; place-items: center; border-radius: 12px; }
+.cal-day.today .cal-num { background: var(--ink); color: #fff; }
+.ev { display: block; font-size: 12px; line-height: 1.3; padding: 2px 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--c-bg, var(--line-2)); color: var(--c, var(--ink)); border-left: 3px solid var(--c, var(--ink-3)); }
+.ev.done { text-decoration: line-through; opacity: 0.6; }
+.ev-revize { --c: var(--ochre-ink); --c-bg: var(--ochre-soft); }
+.ev-schuzka { --c: #2f5a86; --c-bg: #e1eaf4; }
+.ev-termin { --c: var(--red); --c-bg: var(--red-soft); }
+.ev-soukrome { --c: #6a4c8a; --c-bg: #ece5f3; }
+.ev-poznamka { --c: var(--ink-2); --c-bg: var(--line-2); }
+.ev-due { --c: var(--ink-3); --c-bg: transparent; border-left-style: dashed; }
+.ev-faktura { --c: var(--green); --c-bg: var(--green-soft); }
+.ev-doklad { --c: #46576a; --c-bg: var(--blue-soft); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 5px; margin-right: 7px; background: var(--c, var(--ink-3)); }
+.dot-revize { --c: var(--ochre); } .dot-schuzka { --c: #2f5a86; } .dot-termin { --c: var(--red); } .dot-soukrome { --c: #6a4c8a; }
+.dot-due { --c: var(--ink-3); } .dot-faktura { --c: var(--green); } .dot-doklad { --c: #46576a; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.cal-legend .ev { display: inline-block; }
+.cal-agenda { cursor: pointer; display: grid; gap: 4px; }
+.cal-agenda.today { border-color: var(--ink); }
+.cal-agenda .ev { white-space: normal; font-size: 14px; padding: 4px 8px; }
+@media (max-width: 720px) { .cal-title { font-size: 17px; margin: 0; } }
+
+/* vystavení faktury */
+.g-four { display: grid; grid-template-columns: 110px minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.g-four label, .g-two label { display: grid; gap: 4px; }
+.items-head, .item { display: grid; grid-template-columns: 150px minmax(0, 1fr) 120px 110px 34px; gap: 8px; align-items: start; }
+.items-head { padding: 0 0 4px; font-weight: 600; }
+.item { padding: 6px 0; border-top: 1px solid var(--line-2); }
+.item .input { flex: none; width: 100%; }
+.item textarea.input { resize: vertical; font: inherit; padding-top: 7px; min-height: 36px; height: auto; }
+.item-q { display: grid; grid-template-columns: 1fr 72px; gap: 4px; }
+.item-sum { padding-top: 8px; }
+.r { text-align: right; }
+input.r { text-align: right; }
+.inv-total { display: flex; justify-content: flex-end; align-items: baseline; gap: 14px; border-top: 2px solid var(--ink); padding-top: 10px; }
+.inv-total b { font-size: 24px; }
+@media (max-width: 720px) {
+  .g-four { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .items-head { display: none; }
+  .item { grid-template-columns: 150px minmax(0, 1fr) 34px; }
+  .item textarea { grid-column: 1 / -1; order: -1; }
+  .item-sum { grid-column: 1 / -1; order: 5; text-align: right; padding-top: 0; font-weight: 650; }
+}
+
+/* faktura – list A4 */
+.sheet-wrap { overflow-x: auto; }
+.sheet { width: 210mm; min-height: 297mm; margin: 0 auto; background: #fff; color: #111; padding: 16mm 15mm; box-shadow: 0 1px 3px rgba(0,0,0,.12); font-size: 10pt; line-height: 1.4; }
+.inv-top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #111; padding-bottom: 8mm; }
+.inv-title { font-size: 20pt; font-weight: 800; letter-spacing: .01em; }
+.inv-dates { display: grid; grid-template-columns: auto auto; gap: 1mm 6mm; margin: 0; }
+.inv-dates dt { color: #555; } .inv-dates dd { margin: 0; font-weight: 650; text-align: right; }
+.inv-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 10mm; padding: 7mm 0; }
+.inv-lbl { font-size: 8.5pt; color: #666; font-weight: 700; margin-bottom: 1.5mm; }
+.inv-small { margin-top: 3mm; font-size: 9pt; color: #333; }
+.inv-bank { display: grid; gap: 1mm; padding: 3mm 4mm; background: #f3f3f1; border-radius: 2mm; }
+.inv-bank span, .inv-strip span, .inv-sum span { display: block; font-size: 8pt; color: #666; }
+.inv-bank div { display: grid; grid-template-columns: 26mm 1fr; } .inv-bank span { display: inline; }
+.inv-strip { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 3mm 0; gap: 4mm; }
+.inv-items { width: 100%; border-collapse: collapse; margin-top: 6mm; }
+.inv-items th { font-size: 8.5pt; color: #555; text-align: left; border-bottom: 1px solid #999; padding: 1.5mm 2mm; font-weight: 700; }
+.inv-items td { padding: 2mm; border-bottom: 1px solid #e3e3e3; vertical-align: top; }
+.inv-items .nw { white-space: nowrap; }
+.inv-items .r, .inv-items th.r { text-align: right; }
+.inv-foot { display: grid; grid-template-columns: 1fr 72mm; gap: 10mm; margin-top: 8mm; }
+.inv-signbox { height: 28mm; border: 1px dashed #bbb; border-radius: 2mm; }
+.inv-sum > div { display: flex; justify-content: space-between; align-items: baseline; padding: 1mm 0; }
+.inv-sum span { display: inline; font-size: 9pt; }
+.inv-grand { border-top: 2px solid #111; margin-top: 1mm; padding-top: 2mm !important; font-size: 14pt; font-weight: 800; }
+.inv-qr { display: flex !important; flex-direction: column; align-items: flex-end !important; gap: 1mm; margin-top: 4mm; }
+@media print {
+  @page { size: A4; margin: 0; }
+  body { background: #fff; }
+  .side, .tabbar, .no-print, .toast { display: none !important; }
+  .shell { display: block !important; }
+  .main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  .sheet { box-shadow: none; margin: 0; }
+  .sheet-wrap { overflow: visible; }
+}
+@media (max-width: 720px) { .cal.hide-m { display: none; } .cal-bar .seg { flex: 1 1 100%; } }
+.g-four > label, .g-two > label { min-width: 0; }
+.g-four .input, .g-four .select, .g-two .input { width: 100%; min-width: 0; flex: none; }
+.main { min-width: 0; }
+@media (max-width: 720px) { .head { flex-wrap: wrap; } .sheet-wrap { margin: 0 -16px; } }
+.bar .select { min-width: 0; max-width: 100%; }

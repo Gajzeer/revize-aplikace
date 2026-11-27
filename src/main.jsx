@@ -12,10 +12,13 @@ import Cenik from './pages/Cenik'
 import Doklady from './pages/Doklady'
 import Login from './pages/Login'
 import Import from './pages/Import'
+import Kalendar from './pages/Kalendar'
+import Faktura from './pages/Faktura'
 
 const PAGES = [
   { id: 'prehled', label: 'Přehled', icon: 'home', C: Prehled },
-  { id: 'revize', label: 'Revize', icon: 'calendar', C: Revize },
+  { id: 'revize', label: 'Revize', icon: 'bolt', C: Revize },
+  { id: 'kalendar', label: 'Kalendář', icon: 'calendar', C: Kalendar },
   { id: 'klienti', label: 'Klienti', icon: 'users', C: Klienti },
   { id: 'faktury', label: 'Faktury', icon: 'doc', C: Faktury },
   { id: 'cenik', label: 'Ceník', icon: 'tag', C: Cenik },
@@ -36,8 +39,8 @@ function Shell({ email }) {
   const hash = useHash()
   const [page, ...rest] = hash.split('/')
   const { db, error, lateCount } = useData()
-  const P = page === 'import' ? { id: 'import', C: Import } : PAGES.find((p) => p.id === page) || PAGES[0]
-  useEffect(() => { window.scrollTo(0, 0) }, [page])
+  const P = page === 'import' ? { id: 'import', C: Import } : page === 'faktura' ? { id: 'faktury', C: Faktura } : PAGES.find((p) => p.id === page) || PAGES[0]
+  useEffect(() => { window.scrollTo(0, 0) }, [hash])
 
   return (
     <div className="shell">

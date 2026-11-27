@@ -84,7 +84,7 @@ export default function Revize() {
       </div>
       {view !== 'terminy' && (
         <div className="small muted" style={{ margin: '-4px 0 12px' }}>
-          {view === 'fakturace' ? 'Revize provedené, ale ještě nevyfakturované. Po vystavení faktury klikněte na Vyfakturováno.' : 'Stanice MOL, kde letos ještě chybí revize s termínem do konce roku.'}{' '}
+          {view === 'fakturace' ? 'Revize provedené, ale ještě nevyfakturované. Vystavit fakturu ji připraví i s položkami; Vyfakturováno ji jen odebere ze seznamu.' : 'Stanice MOL, kde letos ještě chybí revize s termínem do konce roku.'}{' '}
           <button className="link" onClick={() => setView('terminy')}>Zpět na termíny</button>
         </div>
       )}
@@ -107,8 +107,11 @@ export default function Revize() {
                   {view === 'fakturace' ? <span className="small muted">hotovo {fmtDate(x.rv[0]?.posledni)}</span> : <Due date={x.next} />}
                   <span className="obj-price num">{x.cena ? fmtKc(x.cena) : ''}</span>
                   {view === 'fakturace' ? (
+                    <>
+                    <a className="btn sm" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }} href={`#/faktura/nova/${x.rv.map((r) => r.id).join(',')}`}>Vystavit fakturu</a>
                     <button
-                      className="btn sm"
+                      className="btn ghost sm"
+                      title="Fakturu jste vystavil jinde – jen odebrat ze seznamu"
                       onClick={async () => {
                         try {
                           for (const r of x.rv) await save('revize', { id: r.id, stav: 'planovano' })
@@ -120,6 +123,7 @@ export default function Revize() {
                     >
                       Vyfakturováno
                     </button>
+                    </>
                   ) : (
                   <button className="btn ghost sm" onClick={() => setDone({ o: x.o, rv: x.rv, datum: iso(TODAY()), sel: Object.fromEntries(x.rv.map((r) => [r.id, !r.pristi || r.pristi <= iso(addMonths(TODAY(), 3))])), ceka: true })}>Hotovo</button>
                   )}

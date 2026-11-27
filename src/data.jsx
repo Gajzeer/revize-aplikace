@@ -3,20 +3,25 @@ import { supabase, daysTo, norm } from './lib'
 
 const Ctx = createContext(null)
 const TABLES = ['klienti', 'objekty', 'revize', 'faktury', 'cenik', 'doklady', 'pristroje']
+const OPTIONAL = ['udalosti', 'nastaveni'] // novější tabulky: když chybí, aplikace běží dál
 
 async function loadAll() {
   if (import.meta.env.DEV && new URLSearchParams(location.search).has('demo')) {
     const f = Object.values(import.meta.glob('./demo.json'))[0]
-    if (f) return (await f()).default
+    if (f) return { udalosti: [], nastaveni: [], ...(await f()).default }
   }
   const out = {}
-  await Promise.all(
-    TABLES.map(async (t) => {
+  await Promise.all([
+    ...TABLES.map(async (t) => {
       const { data, error } = await supabase.from(t).select('*').order('id').range(0, 4999)
       if (error) throw error
       out[t] = data
-    })
-  )
+    }),
+    ...OPTIONAL.map(async (t) => {
+      const { data, error } = await supabase.from(t).select('*').order('id').range(0, 4999)
+      out[t] = error ? [] : data
+    }),
+  ])
   return out
 }
 
@@ -71,7 +76,8 @@ export function DataProvider({ children }) {
       const n = top ? words.filter((w) => w === top).length : 0
       label[k.id] = n >= 3 && n / words.length > 0.6 && !norm(base).includes(norm(top)) ? `${base} – ${top}` : base
     })
-    return { klient: by(db.klienti), objekt: by(db.objekty), label }
+    const nast = Object.fromEntries((db.nastaveni || []).map((r) => [r.klic, r.hodnota]))
+    return { klient: by(db.klienti), objekt: by(db.objekty), label, nast }
   }, [db])
 
   const lateCount = useMemo(

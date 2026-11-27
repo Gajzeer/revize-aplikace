@@ -10,6 +10,7 @@ const P = {
   shield: 'M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6zM9 12l2 2 4-4',
   check: 'M5 12.5 10 17 19 7',
   plus: 'M12 5v14M5 12h14',
+  bolt: 'M13 3 5 14h6l-1 7 8-11h-6z',
 }
 
 export function Icon({ name, size = 20 }) {

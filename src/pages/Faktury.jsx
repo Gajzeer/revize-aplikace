@@ -42,12 +42,16 @@ export default function Faktury({ sub }) {
           <h1>Faktury</h1>
           <p>{rows.length} faktur · celkem {fmtKc(total)} · základ daně {fmtKc(total * 0.2)}</p>
         </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <a className="btn" href="#/faktura/nova" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Vystavit fakturu</a>
         <button
-          className="btn"
+          className="btn ghost"
+          title="Zapsat do evidence fakturu vystavenou jinde"
           onClick={() => setNova({ cislo: nextNumber(), rok: TODAY().getFullYear(), datum_vystaveni: iso(TODAY()), datum_splatnosti: iso(new Date(TODAY().getTime() + 14 * 864e5)), zaplaceno: false })}
         >
-          Zapsat fakturu
+          Zapsat existující
         </button>
+        </div>
       </div>
       <div className="bar">
         <input className="input" placeholder="Hledat číslo, zakázku nebo klienta" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -169,6 +173,7 @@ function FakturaForm({ initial, onClose, onSaved }) {
             </div>
           )}
           {f.soubor && <div className="small faint" style={{ marginTop: 8 }}>Soubor: {f.soubor}</div>}
+          {Array.isArray(items) && items.length > 0 && <a className="small" href={`#/faktura/${f.id}`} style={{ display: 'inline-block', marginTop: 8 }}>Zobrazit fakturu k tisku / PDF</a>}
         </div>
       )}
       <div className="actions">
