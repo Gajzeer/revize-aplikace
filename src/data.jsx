@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { supabase, daysTo } from './lib'
+import { supabase, daysTo, norm } from './lib'
 
 const Ctx = createContext(null)
 const TABLES = ['klienti', 'objekty', 'revize', 'faktury', 'cenik', 'doklady', 'pristroje']
@@ -62,7 +62,16 @@ export function DataProvider({ children }) {
   const idx = useMemo(() => {
     if (!db) return null
     const by = (list) => Object.fromEntries(list.map((r) => [r.id, r]))
-    return { klient: by(db.klienti), objekt: by(db.objekty) }
+    // popisek klienta: zkratka + převažující značka objektů (např. „PIK – ČS MOL“)
+    const label = {}
+    db.klienti.forEach((k) => {
+      const base = k.zkratka || k.nazev
+      const words = db.objekty.filter((o) => o.klient_id === k.id).map((o) => (o.nazev || '').split(/\s+/)[0])
+      const top = words.sort().reduce((a, w, i, arr) => (arr.filter((x) => x === w).length > (a ? arr.filter((x) => x === a).length : 0) ? w : a), null)
+      const n = top ? words.filter((w) => w === top).length : 0
+      label[k.id] = n >= 3 && n / words.length > 0.6 && !norm(base).includes(norm(top)) ? `${base} – ${top}` : base
+    })
+    return { klient: by(db.klienti), objekt: by(db.objekty), label }
   }, [db])
 
   const lateCount = useMemo(

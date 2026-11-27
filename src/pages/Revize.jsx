@@ -40,7 +40,7 @@ export default function Revize() {
         <select className="select" value={kl} onChange={(e) => setKl(e.target.value)} aria-label="Klient">
           <option value="">Všichni klienti</option>
           {klienti.map((k) => (
-            <option key={k.id} value={k.id}>{k.zkratka || k.nazev}</option>
+            <option key={k.id} value={k.id}>{idx.label[k.id]}</option>
           ))}
         </select>
         <Seg value={range} onChange={setRange} options={[['late', 'Po termínu'], ['30', 'Do měsíce'], ['90', 'Do 3 měsíců'], ['all', 'Vše']]} />

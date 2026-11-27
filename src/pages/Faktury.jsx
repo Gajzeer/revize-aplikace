@@ -54,7 +54,7 @@ export default function Faktury({ sub }) {
         <select className="select" value={kl} onChange={(e) => setKl(e.target.value)} aria-label="Klient">
           <option value="">Všichni klienti</option>
           {db.klienti.map((k) => (
-            <option key={k.id} value={k.id}>{k.zkratka || k.nazev}</option>
+            <option key={k.id} value={k.id}>{idx.label[k.id]}</option>
           ))}
         </select>
         <select className="select" value={rok} onChange={(e) => setRok(e.target.value)} aria-label="Rok">

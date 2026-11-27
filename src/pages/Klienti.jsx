@@ -9,7 +9,7 @@ export default function Klienti({ sub }) {
 }
 
 function Seznam() {
-  const { db } = useData()
+  const { db, idx } = useData()
   const [q, setQ] = useState('')
   const [edit, setEdit] = useState(null)
   const Y = TODAY().getFullYear()
@@ -19,9 +19,10 @@ function Seznam() {
       .map((k) => {
         const f = db.faktury.filter((x) => x.klient_id === k.id)
         const sum = (l) => l.reduce((a, x) => a + Number(x.castka), 0)
-        return { ...k, letos: sum(f.filter((x) => x.rok === Y)), celkem: sum(f), nf: f.length, no: db.objekty.filter((o) => o.klient_id === k.id).length }
+        const obj = db.objekty.filter((o) => o.klient_id === k.id)
+        return { ...k, letos: sum(f.filter((x) => x.rok === Y)), celkem: sum(f), nf: f.length, no: obj.length, hay: norm(`${k.nazev} ${k.zkratka} ${k.ico} ${k.adresa} ${k.poznamka} ${obj.map((o) => `${o.nazev} ${o.adresa}`).join(' ')}`) }
       })
-      .filter((k) => !t || norm(`${k.nazev} ${k.zkratka} ${k.ico} ${k.adresa}`).includes(t))
+      .filter((k) => !t || k.hay.includes(t))
       .sort((a, b) => b.celkem - a.celkem)
   }, [db, q])
 
@@ -35,12 +36,12 @@ function Seznam() {
         <button className="btn" onClick={() => setEdit({})}>Přidat klienta</button>
       </div>
       <div className="bar">
-        <input className="input" placeholder="Hledat podle názvu, IČO nebo adresy" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" placeholder="Hledat klienta, IČO, adresu nebo objekt (např. MOL)" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       <div className="kgrid">
         {list.map((k) => (
           <button key={k.id} className="kcard" onClick={() => (location.hash = `#/klienti/${k.id}`)}>
-            <span className="abbr">{k.zkratka || k.nazev.split(' ').slice(0, 2).join(' ')}</span>
+            <span className="abbr">{k.zkratka ? idx.label[k.id] : k.nazev.split(' ').slice(0, 2).join(' ')}</span>
             <span className="muted small">{k.nazev}{k.ico ? ` · IČO ${k.ico}` : ''}</span>
             <span className="meta">
               <span>Letos <b className="num" style={{ color: 'var(--ink)' }}>{fmtKc(k.letos)}</b></span>
