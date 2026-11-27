@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useData } from '../data'
+import Prilohy from './Prilohy'
 import { TODAY, fmtDate, fmtKc, norm } from '../lib'
 import { Due, Modal, useToast } from '../ui'
 
@@ -64,6 +65,7 @@ function Detail({ id }) {
   const k = db.klienti.find((x) => x.id === id)
   const [edit, setEdit] = useState(null)
   const [obj, setObj] = useState(null)
+  const [otevrene, setOtevrene] = useState({})
   const [q, setQ] = useState('')
   const [toast, say] = useToast()
   const objekty = useMemo(() => {
@@ -105,7 +107,7 @@ function Detail({ id }) {
             {objekty.length === 0 && <div className="empty">Zatím žádné objekty. Přidejte první objekt, ať můžete hlídat jeho revize.</div>}
             <div className="rows">
               {objekty.map((o) => (
-                <details key={o.id} className="row" style={{ display: 'block' }}>
+                <details key={o.id} className="row" style={{ display: 'block' }} onToggle={(e) => { const on = e.currentTarget.open; setOtevrene((x) => ({ ...x, [o.id]: on })) }}>
                   <summary style={{ display: 'flex', justifyContent: 'space-between', gap: 12, cursor: 'pointer', listStyle: 'none' }}>
                     <span>
                       <span className="t">{o.nazev}</span>
@@ -123,6 +125,15 @@ function Detail({ id }) {
                         <Due date={r.pristi} />
                       </div>
                     ))}
+                    {db.zpravy.some((z) => z.objekt_id === o.id) && (
+                      <div className="small">
+                        Zprávy:{' '}
+                        {db.zpravy.filter((z) => z.objekt_id === o.id).sort((a, b) => (b.datum_revize || '').localeCompare(a.datum_revize || '')).slice(0, 4).map((z, i) => (
+                          <span key={z.id}>{i > 0 && ', '}<a href={`#/zpravy/${z.id}`}>{z.ev_cislo || z.nazev}</a></span>
+                        ))}
+                      </div>
+                    )}
+                    {otevrene[o.id] && <Prilohy objektId={o.id} />}
                     <div><button className="link small" onClick={() => setObj(o)}>Upravit objekt</button></div>
                   </div>
                 </details>
