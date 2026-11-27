@@ -3,6 +3,7 @@ import { useData } from '../data'
 import { TODAY, addMonths, fmtDate, iso, norm, parse, supabase } from '../lib'
 import { Modal, useToast } from '../ui'
 import { kvGet, kvSet } from '../offline'
+import { nahratSablony, stahnoutWord, zdrojSablony } from '../sablony'
 
 export const TYPY_Z = {
   SP: 'Spotřebiče',
@@ -61,6 +62,7 @@ function Seznam() {
           <p>{db.zpravy.length} zpráv. Novou zprávu vytvoříte nejrychleji z loňské: otevřete ji a dejte „Nová zpráva z této“.</p>
         </div>
       </div>
+      <SablonyPanel />
       {db.zpravy.length === 0 && (
         <section className="panel" style={{ marginBottom: 16 }}>
           <h2>Zatím žádné zprávy</h2>
@@ -104,7 +106,7 @@ function Seznam() {
 }
 
 // vytvoří kopii zprávy pro novou revizi: posune data, rok v ev. čísle a termín příští revize
-export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }) {
+export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }, zpravy = []) {
   const { data: full, error } = await supabase.from('zpravy').select('*').eq('id', src.id).single()
   if (error) throw error
   const oldY = (full.datum_revize || '').slice(0, 4)
@@ -135,7 +137,7 @@ export async function novaZeZpravy(src, { datum, vyp, pred, lhuta }) {
     .insert({
       objekt_id: full.objekt_id, revize_id: full.revize_id, typ: full.typ, nazev, ev_cislo: ev || null,
       datum_revize: datum, datum_vypracovani: vyp, datum_predani: pred, stav: 'rozpracovano', vzor: false,
-      zdroj: `kopie zprávy ${full.nazev}`, bloky,
+      zdroj: zdrojSablony(full, zpravy) ? `kopie: ${zdrojSablony(full, zpravy)}` : `kopie zprávy ${full.nazev}`, bloky,
     })
     .select()
     .single()
@@ -153,6 +155,7 @@ function Editor({ id }) {
   const [repl, setRepl] = useState(null)
   const [del, setDel] = useState(false)
   const [nahled, setNahled] = useState(false)
+  const [wordBusy, setWordBusy] = useState(false)
   const [toast, say] = useToast()
 
   useEffect(() => {
@@ -209,9 +212,22 @@ function Editor({ id }) {
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn ghost" onClick={() => setNahled(!nahled)}>{nahled ? 'Upravovat' : 'Náhled'}</button>
-          <button className="btn ghost" onClick={() => { setNahled(true); setTimeout(() => { const t = document.title; document.title = z.nazev; print(); document.title = t }, 100) }}>Tisk / PDF</button>
+          <button
+            className="btn"
+            disabled={wordBusy}
+            title="Vyplní váš původní Word. PDF pak uložíte ve Wordu: Soubor → Uložit jako → PDF."
+            onClick={async () => {
+              if (dirty) await ulozit()
+              setWordBusy(true)
+              try { await stahnoutWord(z, db.zpravy) } catch (e) { say(e.message) }
+              setWordBusy(false)
+            }}
+          >
+            {wordBusy ? 'Připravuji Word…' : 'Stáhnout Word'}
+          </button>
+          <button className="btn ghost" onClick={() => { setNahled(true); setTimeout(() => { const t = document.title; document.title = z.nazev; print(); document.title = t }, 100) }}>Rychlý tisk</button>
           <button className="btn ghost" onClick={() => setNova({ datum: iso(TODAY()), vyp: iso(TODAY()), pred: iso(TODAY()), lhuta: rev?.lhuta_mesicu || 12 })}>Nová zpráva z této</button>
-          <button className="btn" disabled={!dirty || busy} onClick={ulozit}>{busy ? 'Ukládám…' : dirty ? 'Uložit' : 'Uloženo'}</button>
+          <button className="btn ghost" disabled={!dirty || busy} onClick={ulozit}>{busy ? 'Ukládám…' : dirty ? 'Uložit' : 'Uloženo'}</button>
         </div>
       </div>
 
@@ -298,7 +314,7 @@ function Editor({ id }) {
               onClick={async () => {
                 setBusy(true)
                 try {
-                  const n = await novaZeZpravy(z, nova)
+                  const n = await novaZeZpravy(z, nova, db.zpravy)
                   await reload()
                   setNova(null)
                   location.hash = `#/zpravy/${n.id}`
@@ -361,14 +377,19 @@ function Editor({ id }) {
 function TabBlok({ b, edit, onChange }) {
   const setCell = (ri, ci, x) => onChange({ ...b, r: b.r.map((row, i) => (i === ri ? row.map((c, j) => (j === ci ? { ...c, x } : c)) : row)) })
   // řádek tabulky s měřením: kopie posledního (pro nový spotřebič / obvod)
+  // řádky se označí původním pořadím, aby šly přenést do Wordu (nový řádek = kopie řádku nad ním)
+  const stamp = (rows) => (rows.some((r) => r[0]?.ri !== undefined || r[0]?.nw) ? rows : rows.map((r, i) => [{ ...r[0], ri: i }, ...r.slice(1)]))
   const addRow = (ri) => {
-    const src = b.r[ri]
-    const nr = src.map((c, j) => ({ ...c, x: j === 0 && /^\d+$/.test(c.x) ? String(Number(c.x) + 1) : '' }))
-    const r = [...b.r]
+    const rows = stamp(b.r)
+    const src = rows[ri]
+    const from = src[0].nw ? src[0].from : src[0].ri
+    const nr = src.map((c, j) => ({ x: j === 0 && /^\d+$/.test(c.x) ? String(Number(c.x) + 1) : '', ...(c.s ? { s: c.s } : {}) }))
+    nr[0] = { ...nr[0], nw: 1, from }
+    const r = [...rows]
     r.splice(ri + 1, 0, nr)
     onChange({ ...b, r })
   }
-  const delRow = (ri) => onChange({ ...b, r: b.r.filter((_, i) => i !== ri) })
+  const delRow = (ri) => onChange({ ...b, r: stamp(b.r).filter((_, i) => i !== ri) })
   const cols = Math.max(...b.r.map((r) => r.reduce((a, c) => a + (c.s || 1), 0)))
   return (
     <table className={`rz-tab ${cols > 10 ? 'dense' : ''}`}>
@@ -394,5 +415,43 @@ function TabBlok({ b, edit, onChange }) {
         ))}
       </tbody>
     </table>
+  )
+}
+
+function SablonyPanel() {
+  const [stav, setStav] = useState(null)
+  const [skryt, setSkryt] = useState(() => { try { return localStorage.getItem('sablony-ok') === '1' } catch { return false } })
+  if (skryt && !stav) return null
+  return (
+    <section className="panel" style={{ marginBottom: 16 }}>
+      <h2>Word šablony zpráv</h2>
+      <p style={{ marginTop: 0 }}>
+        Tlačítko <b>Stáhnout Word</b> vyplní váš původní Word (hlavička PIK, tabulky, písmo). Jednou sem nahrajte složku <b>sablony-zprav</b> z CLAUDE\REVIZE APLIKACE (430 souborů, asi 41 MB).
+      </p>
+      <label className="btn" style={{ display: 'inline-flex', alignItems: 'center', cursor: stav?.busy ? 'wait' : 'pointer' }}>
+        {stav?.busy ? `Nahrávám ${stav.n} z ${stav.total}…` : 'Vybrat složku sablony-zprav'}
+        <input
+          type="file"
+          hidden
+          multiple
+          webkitdirectory=""
+          disabled={stav?.busy}
+          onChange={async (e) => {
+            const files = e.target.files
+            setStav({ busy: true, n: 0, total: files.length })
+            try {
+              const r = await nahratSablony(files, (n, total) => setStav({ busy: true, n, total }))
+              setStav({ hotovo: r })
+              if (!r.err) { try { localStorage.setItem('sablony-ok', '1') } catch {} }
+            } catch (err) {
+              setStav({ chyba: err.message })
+            }
+          }}
+        />
+      </label>
+      {stav?.hotovo && <div className="small" style={{ marginTop: 8 }}>Hotovo: nahráno {stav.hotovo.done}, už nahraných {stav.hotovo.skip}{stav.hotovo.err ? `, nepovedlo se ${stav.hotovo.err} (vyberte složku znovu, doplní se jen chybějící)` : ''}.</div>}
+      {stav?.chyba && <div className="small err" style={{ marginTop: 8 }}>Nahrání selhalo: {stav.chyba}</div>}
+      {stav?.hotovo && !stav.hotovo.err && <button className="link small" style={{ marginTop: 6 }} onClick={() => { setSkryt(true); setStav(null) }}>Skrýt</button>}
+    </section>
   )
 }
