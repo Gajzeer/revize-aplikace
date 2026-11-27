@@ -83,7 +83,9 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const cron = req.headers.get('x-cron-token')
     if (body.souhrn) {
-      if (!env('CRON_TOKEN') || cron !== env('CRON_TOKEN')) return json({ error: 'Neplatný klíč.' }, 401)
+      const ct = env('CRON_TOKEN').trim()
+      if (!ct) return json({ error: 'V Supabase chybí CRON_TOKEN.' }, 401)
+      if ((cron || '').trim() !== ct) return json({ error: `Neplatný klíč (délka ${(cron || '').trim().length} vs. ${ct.length}).` }, 401)
       const s = await souhrn()
       const { t, from } = transport()
       await t.sendMail({ from, to: env('SOUHRN_TO', env('SMTP_USER')), subject: s.subject, text: s.text })
