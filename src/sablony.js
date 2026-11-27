@@ -27,7 +27,8 @@ async function stahnout(path, cacheKey) {
   return buf
 }
 
-export async function stahnoutWord(z, zpravy) {
+// vyplněný Word zprávy jako soubor (Blob)
+export async function wordBlob(z, zpravy) {
   const zdroj = zdrojSablony(z, zpravy)
   if (!zdroj) throw new Error('Zpráva nemá původní Word šablonu.')
   const key = await klicSablony(zdroj)
@@ -38,10 +39,15 @@ export async function stahnoutWord(z, zpravy) {
     if (e.message === 'NENI') throw new Error('Word šablona této zprávy ještě není nahraná. Nahrajte šablony v seznamu Revizních zpráv.')
     throw e
   }
-  const blob = await vyplnitDocx(tpl, (h) => stahnout(`sablony/media/${h}`, `med-${h}`), z.bloky)
+  return vyplnitDocx(tpl, (h) => stahnout(`sablony/media/${h}`, `med-${h}`), z.bloky)
+}
+export const nazevSouboru = (z) => z.nazev.replace(/[\\/:*?"<>|]+/g, '-')
+
+export async function stahnoutWord(z, zpravy) {
+  const blob = await wordBlob(z, zpravy)
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `${z.nazev.replace(/[\\/:*?"<>|]+/g, '-')}.docx`
+  a.download = `${nazevSouboru(z)}.docx`
   document.body.appendChild(a)
   a.click()
   a.remove()

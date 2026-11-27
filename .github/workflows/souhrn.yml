@@ -1,0 +1,17 @@
+# Ranní souhrn e-mailem: každý den v 6:00 (v létě v 7:00) zavolá funkci posta v Supabase
+name: Ranní souhrn
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+jobs:
+  souhrn:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Odeslat souhrn
+        env:
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+        run: |
+          if [ -z "$CRON_TOKEN" ]; then echo "Chybí secret CRON_TOKEN"; exit 1; fi
+          curl -sS --fail-with-body -X POST https://proddwpjcpceaodbmxvp.supabase.co/functions/v1/posta \
+            -H "Content-Type: application/json" -H "x-cron-token: $CRON_TOKEN" -d '{"souhrn":true}'

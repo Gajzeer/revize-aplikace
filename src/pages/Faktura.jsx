@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { OdeslatEmail } from '../posta'
 import QRCode from 'qrcode'
 import { useData } from '../data'
 import { TODAY, fmtDate, fmtKc, iso, norm, supabase } from '../lib'
@@ -178,6 +179,19 @@ function NovaFaktura({ revizeIds, nabidkaId }) {
 }
 
 // --- tisk / PDF ------------------------------------------------------------
+// faktura jako PDF (A4) ze stránky, stejně jak vypadá na obrazovce a při tisku
+async function pdfZListu(el) {
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
+  const c = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, windowWidth: 1000 })
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  const w = 210
+  const h = (c.height * w) / c.width
+  const img = c.toDataURL('image/jpeg', 0.92)
+  let y = 0
+  for (let i = 0; y < h - 0.5; i++, y += 297) { if (i) pdf.addPage(); pdf.addImage(img, 'JPEG', 0, -y, w, h) }
+  return pdf.output('blob')
+}
+
 function FakturaTisk({ id }) {
   const { db, idx } = useData()
   const f = db.faktury.find((x) => x.id === id)
@@ -187,6 +201,7 @@ function FakturaTisk({ id }) {
   const k = f ? idx.klient[f.klient_id] : null
   const VS = f ? vs(f.cislo, f.rok) : ''
   const ref = useRef(null)
+  const [mail, setMail] = useState(false)
 
   useEffect(() => {
     supabase.from('polozky_faktur').select('*').eq('faktura_id', id).order('id').then(({ data }) => setItems(data || []))
@@ -212,9 +227,20 @@ function FakturaTisk({ id }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <a className="btn ghost" href="#/faktury" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>Zpět</a>
+          <button className="btn ghost" onClick={() => setMail(true)}>Odeslat e-mailem</button>
           <button className="btn" onClick={() => { const t = document.title; document.title = `FAKTURA č.${f.cislo.replace('/', '-20')} - ${k?.zkratka || ''}`; print(); document.title = t }}>Tisk / uložit PDF</button>
         </div>
       </div>
+      {mail && (
+        <OdeslatEmail
+          title="Odeslat fakturu e-mailem"
+          to={k?.email || ''}
+          subject={`Faktura ${f.cislo}`}
+          text={`Dobrý den,\n\nv příloze zasílám fakturu č. ${f.cislo} na částku ${kc(f.castka)} se splatností ${fmtDate(f.datum_splatnosti)}.\nVariabilní symbol: ${VS}\nČíslo účtu: ${d.ucet || ''}\n\nS pozdravem\n${d.jmeno || ''}${d.telefon ? `\n${d.telefon}` : ''}`}
+          priprav={async () => [{ name: `FAKTURA č.${f.cislo.replace('/', '-20')} - ${k?.zkratka || ''}.pdf`, blob: await pdfZListu(ref.current) }]}
+          onClose={() => setMail(false)}
+        />
+      )}
       {!d.jmeno && <div className="panel err no-print">Chybí údaje dodavatele (tabulka nastavení).</div>}
       <div className="sheet-wrap">
         <article className="sheet" ref={ref}>

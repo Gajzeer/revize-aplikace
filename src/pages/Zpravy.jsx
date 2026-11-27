@@ -3,7 +3,8 @@ import { useData } from '../data'
 import { TODAY, addMonths, fmtDate, iso, norm, parse, supabase } from '../lib'
 import { Modal, useToast } from '../ui'
 import { kvGet, kvSet } from '../offline'
-import { nahratSablony, stahnoutWord, zdrojSablony } from '../sablony'
+import { nahratSablony, nazevSouboru, stahnoutWord, wordBlob, zdrojSablony } from '../sablony'
+import { OdeslatEmail } from '../posta'
 
 export const TYPY_Z = {
   SP: 'Spotřebiče',
@@ -241,6 +242,7 @@ function Editor({ id }) {
   const [del, setDel] = useState(false)
   const [nahled, setNahled] = useState(false)
   const [wordBusy, setWordBusy] = useState(false)
+  const [mail, setMail] = useState(false)
   const [toast, say] = useToast()
 
   useEffect(() => {
@@ -310,6 +312,7 @@ function Editor({ id }) {
           >
             {wordBusy ? 'Připravuji Word…' : 'Stáhnout Word'}
           </button>
+          <button className="btn ghost" onClick={async () => { if (dirty) await ulozit(); setMail(true) }}>Odeslat e-mailem</button>
           <button className="btn ghost" onClick={() => { setNahled(true); setTimeout(() => { const t = document.title; document.title = z.nazev; print(); document.title = t }, 100) }}>Rychlý tisk</button>
           <button className="btn ghost" onClick={() => setNova({ datum: iso(TODAY()), vyp: iso(TODAY()), pred: iso(TODAY()), lhuta: rev?.lhuta_mesicu || 12 })}>Nová zpráva z této</button>
           <button className="btn ghost" disabled={!dirty || busy} onClick={ulozit}>{busy ? 'Ukládám…' : dirty ? 'Uložit' : 'Uloženo'}</button>
@@ -380,6 +383,22 @@ function Editor({ id }) {
         </article>
       </div>
 
+      {mail && (() => {
+        const o = idx.objekt[z.objekt_id]
+        const kl = o && db.klienti.find((k) => k.id === o.klient_id)
+        const dod = idx.nast.dodavatel || {}
+        return (
+          <OdeslatEmail
+            title="Odeslat zprávu e-mailem"
+            to={kl?.email || ''}
+            subject={`Revizní zpráva ${z.ev_cislo || z.nazev}`}
+            text={`Dobrý den,\n\nv příloze zasílám revizní zprávu ${z.nazev}${o ? ` (${o.nazev})` : ''}.\n\nS pozdravem\n${dod.jmeno || ''}${dod.telefon ? `\n${dod.telefon}` : ''}`}
+            priprav={async () => [{ name: `${nazevSouboru(z)}.docx`, blob: await wordBlob(z, db.zpravy) }]}
+            onClose={() => setMail(false)}
+            onSent={() => { if (z.stav !== 'predano') { setZ({ ...z, stav: 'predano' }); save('zpravy', { id: z.id, stav: 'predano' }) } }}
+          />
+        )
+      })()}
       {nova && (
         <Modal title="Nová zpráva z této" onClose={() => setNova(null)}>
           <div className="muted small">Zkopíruje celou zprávu. Data a evidenční číslo se posunou, termín příští revize se přepočítá. Naměřené hodnoty pak jen přepíšete.</div>
