@@ -1,0 +1,13 @@
+name: Cena benzínu
+# jednou denně uloží průměrnou cenu benzínu v ČR (funkce 'benzin' v Supabase), pro Plán tras
+on:
+  schedule:
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+permissions: {}
+jobs:
+  benzin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stáhnout cenu
+        run: curl -sS --fail-with-body -X POST https://proddwpjcpceaodbmxvp.supabase.co/functions/v1/benzin -H "Content-Type: application/json" -d '{}'

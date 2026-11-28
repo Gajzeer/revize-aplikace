@@ -496,3 +496,8 @@ input.r { text-align: right; }
 .dane-dlazdice > div.ok { border-top-color: var(--green); }
 .dane-dlazdice b { display: block; font-size: 20px; }
 .dane-dlazdice span { display: block; font-size: 12px; color: var(--ink-2); line-height: 1.35; margin-top: 2px; }
+.trasa-cisla { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
+.trasa-cisla > div { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.trasa-cisla > div.ok { border-color: var(--green); background: var(--green-soft); }
+.trasa-cisla b { display: block; font-size: 17px; }
+.trasa-cisla span { display: block; font-size: 12px; color: var(--ink-2); }
