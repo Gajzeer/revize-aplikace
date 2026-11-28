@@ -18,6 +18,7 @@ import Zpravy from './pages/Zpravy'
 import Nabidky from './pages/Nabidky'
 import Dane from './pages/Dane'
 import Trasy from './pages/Trasy'
+import Vyhled from './pages/Vyhled'
 import { oznamitDnes, seznamUpozorneni } from './upozorneni'
 import { frontaVse, smazatVse } from './offline'
 
@@ -26,6 +27,7 @@ const PAGES = [
   { id: 'revize', label: 'Revize', icon: 'bolt', C: Revize },
   { id: 'kalendar', label: 'Kalendář', icon: 'calendar', C: Kalendar },
   { id: 'trasy', label: 'Plán tras', short: 'Trasy', icon: 'route', C: Trasy },
+  { id: 'vyhled', label: 'Výhled na roky', short: 'Výhled', icon: 'chart', C: Vyhled },
   { id: 'klienti', label: 'Klienti', icon: 'users', C: Klienti },
   { id: 'zpravy', label: 'Revizní zprávy', short: 'Zprávy', icon: 'report', C: Zpravy },
   { id: 'faktury', label: 'Faktury', icon: 'doc', C: Faktury },
