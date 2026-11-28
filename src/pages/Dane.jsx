@@ -3,6 +3,7 @@ import { useData } from '../data'
 import { TODAY, fmtDate, fmtKc } from '../lib'
 import { useToast } from '../ui'
 import { celkovaDan, odlozit } from '../danovy'
+import { benzinPoLetech } from '../benzinMol'
 
 // Parametry pro OSVČ – vedlejší činnost, paušální výdaje 80 %
 const PARAM = {
@@ -222,6 +223,11 @@ function Celkem({ y, z, setZal, ulozit, prijmyFaktury, db }) {
   const deti = z.deti?.length ? z.deti : []
   const roky = [...new Set((db.nastaveni || []).filter((r) => /^dane-\d{4}$/.test(r.klic) && Number(r.hodnota?.zam_prijem) > 0).map((r) => Number(r.klic.slice(5))))].sort()
   const fakturyRok = (yy) => db.faktury.filter((x) => rokPrijmu(x) === yy).reduce((a, x) => a + Number(x.castka || 0), 0)
+  // benzín za výjezdy k MOL (Plán tras): jen informativně, daň se z něj nepočítá
+  const { idx } = useData()
+  const spotreba = Number(idx.nast.benzin?.spotreba) || 11
+  const mol = useMemo(() => (idx.nast['mol-vyjezdy'] ? benzinPoLetech(db, idx, { spotreba }) : null), [db, idx, spotreba])
+  const benzinRok = (yy) => mol?.roky.find((r) => r.rok === yy)?.kc || 0
 
   return (
     <>
@@ -282,7 +288,7 @@ function Celkem({ y, z, setZal, ulozit, prijmyFaktury, db }) {
 
             <h3 style={{ margin: '16px 0 6px' }}>Co z toho plyne</h3>
             <ul className="dane-ul">
-              <li>Po daních a pojistném ti z revizí zůstalo zhruba <b>{kc(c.cistyOsvc)}</b> ({kc(c.cistyOsvc / 12)} měsíčně), tedy {pct(c.osvc ? c.cistyOsvc / c.osvc : 0)} z vyfakturovaného. Skutečné náklady jako nafta nebo materiál v tom odečtené nejsou. Daň, která připadá na podnikání, je {kc(c.danZPodnikani)}, pojistné {kc(c.sp + c.zp)}{c.ucetni ? `, účetní ${kc(c.ucetni)}` : ''}.</li>
+              <li>Po daních a pojistném ti z revizí zůstalo zhruba <b>{kc(c.cistyOsvc)}</b> ({kc(c.cistyOsvc / 12)} měsíčně), tedy {pct(c.osvc ? c.cistyOsvc / c.osvc : 0)} z vyfakturovaného. {benzinRok(y) ? <>Po odečtení benzínu za výjezdy k MOL (asi {kc(benzinRok(y))}) zbude <b>{kc(c.cistyOsvc - benzinRok(y))}</b>.</> : 'Skutečné náklady jako benzín nebo materiál v tom odečtené nejsou.'} Daň, která připadá na podnikání, je {kc(c.danZPodnikani)}, pojistné {kc(c.sp + c.zp)}{c.ucetni ? `, účetní ${kc(c.ucetni)}` : ''}.</li>
               <li>Z každé zaplacené faktury si odkládej asi <b>{pct(odlozit(y))}</b> na daň a pojistné. Při {kc(c.osvc)} je to {kc(c.osvc * odlozit(y))} za rok.</li>
               {c.uroky > 0 && <li>Úroky z hypotéky ti snížily daň o <b>{kc(c.usporaUroky)}</b>.{Number(z.uroky) > 150000 ? ' Odečíst jde nejvýš 150 000 Kč, zbytek propadá.' : ''}</li>}
               {c.zvyhodneni > 0 && <li>Na dětech ušetříš {kc(c.zvyhodneni)}{z.manzelka ? `, sleva na manželku dělá ${kc(24840)}` : ''}.</li>}
@@ -298,7 +304,7 @@ function Celkem({ y, z, setZal, ulozit, prijmyFaktury, db }) {
           <h2>Příjmy po letech</h2>
           <div style={{ overflowX: 'auto' }}>
             <table className="dane-t">
-              <thead><tr><th>Rok</th><th className="r">Zaměstnání</th><th className="r">Revize</th><th className="r">Celkem hrubé</th><th className="r">Daň</th><th className="r">Čistý příjem</th><th className="r">Měsíčně</th><th className="r">Přiznání</th></tr></thead>
+              <thead><tr><th>Rok</th><th className="r">Zaměstnání</th><th className="r">Revize</th><th className="r">Celkem hrubé</th><th className="r">Daň</th><th className="r">Čistý příjem</th><th className="r">Měsíčně</th>{mol && <th className="r">Benzín MOL</th>}{mol && <th className="r">Zisk po benzínu</th>}<th className="r">Přiznání</th></tr></thead>
               <tbody>
                 {roky.map((yy) => {
                   const h = data(yy)
@@ -308,6 +314,8 @@ function Celkem({ y, z, setZal, ulozit, prijmyFaktury, db }) {
                     <tr key={yy} className={yy === y ? 'sum' : ''}>
                       <td>{yy}</td><td className="r">{kc(r.zam)}</td><td className="r">{kc(r.osvc)}</td><td className="r b">{kc(r.hrube)}</td>
                       <td className="r">{r.danKonecna < 0 ? `bonus ${kc(-r.danKonecna)}` : kc(r.danKonecna)}</td><td className="r b">{kc(r.cisty)}</td><td className="r">{kc(r.cisty / 12)}</td>
+                      {mol && <td className="r">{benzinRok(yy) ? `− ${kc(benzinRok(yy))}` : ''}</td>}
+                      {mol && <td className="r b">{kc(r.cisty - benzinRok(yy))}</td>}
                       <td className="r">{d > 0 ? `doplatek ${kc(d)}` : `přeplatek ${kc(-d)}`}</td>
                     </tr>
                   )
@@ -315,7 +323,7 @@ function Celkem({ y, z, setZal, ulozit, prijmyFaktury, db }) {
               </tbody>
             </table>
           </div>
-          <p className="dane-note">Čistý příjem = hrubý příjem − daň − odvody zaměstnance (odhad) − pojistné z podnikání − účetní.</p>
+          <p className="dane-note">Čistý příjem = hrubý příjem − daň − odvody zaměstnance (odhad) − pojistné z podnikání − účetní.{mol ? ' Zisk po benzínu = čistý příjem − benzín za výjezdy k MOL (výpočet v Plánu tras). Je to jen přehled skutečného zisku: při paušálu 80 % se benzín do daní nedává a daň nemění.' : ''}</p>
         </section>
       )}
     </>

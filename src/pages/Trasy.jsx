@@ -1,5 +1,7 @@
 // Plánovač tras: revize, které jsou na řadě, seskupí do výjezdů po blízkých stanicích
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { PRUMERY } from '../benzinMol'
+import MolBenzin from './MolBenzin'
 import { useData } from '../data'
 import { TODAY, addMonths, fmtDate, fmtKc, iso } from '../lib'
 import { useToast } from '../ui'
@@ -20,7 +22,7 @@ function cenaZCeniku(cenik, klientId, typ) {
 }
 
 // souřadnice adresy z OpenStreetMap (Nominatim), postupně přesněji → hruběji
-async function najit(adresa) {
+export async function najit(adresa) {
   const casti = adresa.split(',').map((s) => s.trim()).filter(Boolean)
   const psc = (adresa.match(/\b(\d{3})\s?(\d{2})\b/) || []).slice(1).join('')
   const pokusy = [adresa, casti.slice(1).join(', '), psc && `postalcode=${psc}`].filter(Boolean)
@@ -87,7 +89,9 @@ export default function Trasy() {
   const bz = benzinRow?.hodnota || {}
   const [bzEdit, setBzEdit] = useState(null)
   const spotreba = Number(bz.spotreba) || 11
-  const cenaL = Number(bz.rucne) || 0
+  // bez zadané ceny počítá s průměrem letošního roku (ČSÚ) a ukáže to jako odhad
+  const cenaOdhad = !(Number(bz.rucne) > 0)
+  const cenaL = Number(bz.rucne) || PRUMERY[TODAY().getFullYear()] || PRUMERY[2026]
   const benzinKc = (k) => Math.round((k * spotreba) / 100 * cenaL)
   async function ulozitBenzin() {
     const hodnota = { spotreba: Number(String(bzEdit.spotreba).replace(',', '.')) || 11, rucne: Number(String(bzEdit.rucne).replace(',', '.')) || null, zadano: iso(TODAY()) }
@@ -183,7 +187,7 @@ export default function Trasy() {
       {bezAdresy.length > 0 && <div className="small muted" style={{ marginBottom: 12 }}>Bez adresy (nejsou v plánu): {bezAdresy.map((x) => x.o.nazev).join(', ')}</div>}
 
       <section className="panel" style={{ marginBottom: 16 }}>
-        {!bzEdit && cenaL ? (
+        {!bzEdit && !cenaOdhad ? (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
             <span>Benzín <b>{cenaL.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč/l</b>{bz.zadano ? <span className="small muted"> (zadáno {fmtDate(bz.zadano)})</span> : null}</span>
             <span>Spotřeba <b>{spotreba.toLocaleString('cs-CZ')} l/100 km</b></span>
@@ -194,15 +198,15 @@ export default function Trasy() {
             <label className="small">Cena benzínu (Kč/l)<input className="input" style={{ width: 140 }} inputMode="decimal" placeholder="např. 38,50" value={bzEdit?.rucne ?? ''} onChange={(e) => setBzEdit({ spotreba, ...bzEdit, rucne: e.target.value })} /></label>
             <label className="small">Spotřeba (l/100 km)<input className="input" style={{ width: 110 }} inputMode="decimal" value={bzEdit?.spotreba ?? spotreba} onChange={(e) => setBzEdit({ rucne: '', ...bzEdit, spotreba: e.target.value })} /></label>
             <button className="btn sm" disabled={!bzEdit?.rucne} onClick={ulozitBenzin}>Uložit</button>
-            {cenaL > 0 && <button className="btn ghost sm" onClick={() => setBzEdit(null)}>Zrušit</button>}
-            <span className="small muted" style={{ flexBasis: '100%' }}>Cenu si aplikace pamatuje, stačí ji změnit, když se výrazně pohne.</span>
+            {!cenaOdhad && <button className="btn ghost sm" onClick={() => setBzEdit(null)}>Zrušit</button>}
+            <span className="small muted" style={{ flexBasis: '100%' }}>{cenaOdhad ? `Zatím počítám s průměrnou cenou ${cenaL.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč/l (ČSÚ). Zadej dnešní cenu a bude to přesné. ` : ''}Cenu si aplikace pamatuje, stačí ji změnit, když se výrazně pohne.</span>
           </div>
         )}
       </section>
 
       {naRade.length === 0 && <div className="panel muted">V tomto období není žádná revize na řadě.</div>}
       {domov && vyjezdy.length > 0 && (
-        <p className="small muted">{vyjezdy.length} výjezdů, {vyjezdy.reduce((a, v) => a + v.mista.length, 0)} stanic, celkem asi {vyjezdy.reduce((a, v) => a + v.km, 0).toLocaleString('cs-CZ')} km, revize za {fmtKc(vyjezdy.reduce((a, v) => a + v.cena, 0))}{cenaL ? `, benzín asi ${fmtKc(benzinKc(vyjezdy.reduce((a, v) => a + v.km, 0)))}` : ''}.</p>
+        <p className="small muted">{vyjezdy.length} výjezdů, {vyjezdy.reduce((a, v) => a + v.mista.length, 0)} stanic, celkem asi {vyjezdy.reduce((a, v) => a + v.km, 0).toLocaleString('cs-CZ')} km, revize za {fmtKc(vyjezdy.reduce((a, v) => a + v.cena, 0))}, benzín asi {fmtKc(benzinKc(vyjezdy.reduce((a, v) => a + v.km, 0)))}.</p>
       )}
       <div style={{ display: 'grid', gap: 12 }}>
         {vyjezdy.map((v, i) => (
@@ -214,8 +218,8 @@ export default function Trasy() {
             <div className="trasa-cisla">
               <div><b>{v.km} km</b><span>za den, tam i zpět</span></div>
               <div><b>{fmtKc(v.cena)}</b><span>za revize</span></div>
-              {cenaL > 0 && <div><b>{fmtKc(benzinKc(v.km))}</b><span>benzín ({((v.km * spotreba) / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} l)</span></div>}
-              {cenaL > 0 && <div className="ok"><b>{fmtKc(v.cena - benzinKc(v.km))}</b><span>zbude po benzínu</span></div>}
+              <div className="benzin"><b>{fmtKc(benzinKc(v.km))}</b><span>benzín za den: {((v.km * spotreba) / 100).toLocaleString('cs-CZ', { maximumFractionDigits: 1 })} l × {cenaL.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč{cenaOdhad ? ' (odhad)' : ''}</span></div>
+              <div className="ok"><b>{fmtKc(v.cena - benzinKc(v.km))}</b><span>zbude po benzínu</span></div>
             </div>
             <ol style={{ margin: '10px 0', paddingLeft: 20 }}>
               {v.mista.map((m, j) => (
@@ -241,6 +245,7 @@ export default function Trasy() {
           </section>
         ))}
       </div>
+      <MolBenzin spotreba={spotreba} najit={najit} />
       {toast}
     </>
   )

@@ -499,5 +499,6 @@ input.r { text-align: right; }
 .trasa-cisla { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-top: 10px; }
 .trasa-cisla > div { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
 .trasa-cisla > div.ok { border-color: var(--green); background: var(--green-soft); }
+.trasa-cisla > div.benzin { border-color: var(--ochre); background: var(--ochre-soft); }
 .trasa-cisla b { display: block; font-size: 17px; }
 .trasa-cisla span { display: block; font-size: 12px; color: var(--ink-2); }
