@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useData } from '../data'
-import { cekaFakturace, molRok } from '../mol'
+import { cekaFakturace, molRok, svsRok } from '../mol'
 import Finance from './Finance'
 import UpozorneniPanel from './Upozorneni'
 import { TODAY, addMonths, daysTo, fmtDate, fmtKc, iso, parse } from '../lib'
@@ -93,6 +93,7 @@ export default function Prehled() {
   }, [db])
 
   const mol = useMemo(() => molRok(db, Y), [db, Y])
+  const svs = useMemo(() => svsRok(db, Y), [db, Y])
   const plan = useMemo(() => {
     const lim = iso(new Date(t.getTime() + 14 * 864e5))
     return db.udalosti.filter((u) => !u.hotovo && u.datum >= iso(t) && u.datum <= lim).sort((a, b) => (a.datum + (a.cas || '')).localeCompare(b.datum + (b.cas || '')))
@@ -199,9 +200,18 @@ export default function Prehled() {
                 </div>
                 <div className="num" style={{ textAlign: 'right' }}>{fmtKc(mol.sumZ)}</div>
               </div>
+              {(svs.zbyva.length > 0 || svs.hotovo.length > 0) && (
+                <div className="row">
+                  <div>
+                    <div className="t">SVS zbývá do konce roku</div>
+                    <div className="s">{svs.stanicZ} pracovišť, {svs.zbyva.length} revizí · letos hotovo {fmtKc(svs.sumH)}</div>
+                  </div>
+                  <div className="num" style={{ textAlign: 'right' }}>{fmtKc(svs.sumZ)}</div>
+                </div>
+              )}
               <div className="row money-total">
                 <div className="t">Celkem ve hře</div>
-                <div className="num" style={{ textAlign: 'right' }}>{fmtKc(s.unpaid.reduce((a, f) => a + Number(f.castka || 0), 0) + fak.reduce((a, r) => a + Number(r.cena || 0), 0) + mol.sumZ)}</div>
+                <div className="num" style={{ textAlign: 'right' }}>{fmtKc(s.unpaid.reduce((a, f) => a + Number(f.castka || 0), 0) + fak.reduce((a, r) => a + Number(r.cena || 0), 0) + mol.sumZ + svs.sumZ)}</div>
               </div>
             </div>
           </section>

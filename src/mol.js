@@ -1,6 +1,8 @@
-// MOL (klient PIK): každá stanice musí mít revize hotové do konce roku
-export function molRok(db, Y) {
-  const pik = db.klienti.find((k) => k.zkratka === 'PIK')
+// klienti, u kterých musí být revize hotové do konce roku: MOL (klient PIK) a SVS (krajská veterinární správa)
+export function molRok(db, Y) { return rocniKlient(db, Y, 'PIK') }
+export function svsRok(db, Y) { return rocniKlient(db, Y, 'SVS') }
+export function rocniKlient(db, Y, zkratka) {
+  const pik = db.klienti.find((k) => k.zkratka === zkratka)
   const objs = new Set(db.objekty.filter((o) => o.klient_id === pik?.id).map((o) => o.id))
   const end = `${Y}-12-31`
   const rv = db.revize.filter((r) => objs.has(r.objekt_id) && r.stav !== 'archiv')
