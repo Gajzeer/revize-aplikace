@@ -1,7 +1,7 @@
 // Plánovač tras: revize, které jsou na řadě, seskupí do výjezdů po blízkých stanicích
 import { useEffect, useMemo, useState } from 'react'
 import { useData } from '../data'
-import { TODAY, addMonths, fmtDate, fmtKc, iso, supabase } from '../lib'
+import { TODAY, addMonths, fmtDate, fmtKc, iso } from '../lib'
 import { useToast } from '../ui'
 
 // vzdušná vzdálenost v km; po silnici počítáme zhruba × 1,3
@@ -77,30 +77,21 @@ const google = (domov, mista) => {
 }
 
 export default function Trasy() {
-  const { db, idx, save, reload } = useData()
+  const { db, idx, save } = useData()
   const [toast, say] = useToast()
   const [opt, setOpt] = useState({ horizont: 'rok', maxStanic: 5, maxKm: 40, klient: '' })
   const [geoStav, setGeoStav] = useState(null)
   const [den, setDen] = useState({})
-  // benzín: průměrná cena ČR (stahuje se jednou denně), ruční cena má přednost; spotřeba l/100 km
+  // benzín: cena zadaná ručně (pamatuje si poslední), spotřeba l/100 km
   const benzinRow = (db.nastaveni || []).find((r) => r.klic === 'benzin')
   const bz = benzinRow?.hodnota || {}
   const [bzEdit, setBzEdit] = useState(null)
-  const [bzStav, setBzStav] = useState(null)
   const spotreba = Number(bz.spotreba) || 11
-  const cenaL = Number(bz.rucne) || Number(bz.auto?.cena) || 0
+  const cenaL = Number(bz.rucne) || 0
   const benzinKc = (k) => Math.round((k * spotreba) / 100 * cenaL)
-  useEffect(() => {
-    if (bz.aktualizovano === iso(TODAY()) && bz.auto) return
-    supabase.functions.invoke('benzin', { body: {} }).then(({ data }) => {
-      if (data?.ok && data.cerstve) reload()
-      else if (data && !data.ok) setBzStav(`Cenu benzínu se nepodařilo stáhnout (${data.chyba || 'neznámá chyba'}). Zadejte ji ručně.`)
-    }).catch(() => {})
-  }, [])
   async function ulozitBenzin() {
-    const { data } = await supabase.from('nastaveni').select('id,hodnota').eq('klic', 'benzin').maybeSingle()
-    const hodnota = { ...(data?.hodnota || bz), spotreba: Number(bzEdit.spotreba) || 11, rucne: bzEdit.rucne === '' ? null : Number(String(bzEdit.rucne).replace(',', '.')) || null }
-    await save('nastaveni', data ? { id: data.id, hodnota } : { klic: 'benzin', hodnota })
+    const hodnota = { spotreba: Number(String(bzEdit.spotreba).replace(',', '.')) || 11, rucne: Number(String(bzEdit.rucne).replace(',', '.')) || null, zadano: iso(TODAY()) }
+    await save('nastaveni', benzinRow ? { id: benzinRow.id, hodnota } : { klic: 'benzin', hodnota })
     setBzEdit(null)
     say('Uloženo')
   }
@@ -192,23 +183,21 @@ export default function Trasy() {
       {bezAdresy.length > 0 && <div className="small muted" style={{ marginBottom: 12 }}>Bez adresy (nejsou v plánu): {bezAdresy.map((x) => x.o.nazev).join(', ')}</div>}
 
       <section className="panel" style={{ marginBottom: 16 }}>
-        {!bzEdit ? (
+        {!bzEdit && cenaL ? (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'baseline' }}>
-            <span>Benzín <b>{cenaL ? `${cenaL.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč/l` : 'cena zatím není'}</b>
-              {' '}<span className="small muted">{bz.rucne ? '(zadaná ručně)' : bz.auto ? `(průměr ČR ${fmtDate(bz.auto.datum)}, ${bz.auto.zdroj}, aktualizuje se denně)` : ''}</span></span>
+            <span>Benzín <b>{cenaL.toLocaleString('cs-CZ', { minimumFractionDigits: 2 })} Kč/l</b>{bz.zadano ? <span className="small muted"> (zadáno {fmtDate(bz.zadano)})</span> : null}</span>
             <span>Spotřeba <b>{spotreba.toLocaleString('cs-CZ')} l/100 km</b></span>
-            <button className="link small" onClick={() => setBzEdit({ rucne: bz.rucne ?? '', spotreba })}>Změnit</button>
+            <button className="link small" onClick={() => setBzEdit({ rucne: String(cenaL).replace('.', ','), spotreba })}>Změnit</button>
           </div>
         ) : (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
-            <label className="small">Vlastní cena benzínu (Kč/l)<input className="input" style={{ width: 150 }} inputMode="decimal" placeholder={bz.auto ? `automaticky ${bz.auto.cena}` : 'např. 38,50'} value={bzEdit.rucne} onChange={(e) => setBzEdit({ ...bzEdit, rucne: e.target.value })} /></label>
-            <label className="small">Spotřeba (l/100 km)<input className="input" style={{ width: 110 }} type="number" step="0.1" value={bzEdit.spotreba} onChange={(e) => setBzEdit({ ...bzEdit, spotreba: e.target.value })} /></label>
-            <button className="btn sm" onClick={ulozitBenzin}>Uložit</button>
-            <button className="btn ghost sm" onClick={() => setBzEdit(null)}>Zrušit</button>
-            <span className="small muted" style={{ flexBasis: '100%' }}>Když vlastní cenu necháte prázdnou, počítá se s průměrnou cenou v ČR, která se stahuje každý den.</span>
+            <label className="small">Cena benzínu (Kč/l)<input className="input" style={{ width: 140 }} inputMode="decimal" placeholder="např. 38,50" value={bzEdit?.rucne ?? ''} onChange={(e) => setBzEdit({ spotreba, ...bzEdit, rucne: e.target.value })} /></label>
+            <label className="small">Spotřeba (l/100 km)<input className="input" style={{ width: 110 }} inputMode="decimal" value={bzEdit?.spotreba ?? spotreba} onChange={(e) => setBzEdit({ rucne: '', ...bzEdit, spotreba: e.target.value })} /></label>
+            <button className="btn sm" disabled={!bzEdit?.rucne} onClick={ulozitBenzin}>Uložit</button>
+            {cenaL > 0 && <button className="btn ghost sm" onClick={() => setBzEdit(null)}>Zrušit</button>}
+            <span className="small muted" style={{ flexBasis: '100%' }}>Cenu si aplikace pamatuje, stačí ji změnit, když se výrazně pohne.</span>
           </div>
         )}
-        {bzStav && <div className="small err" style={{ marginTop: 6 }}>{bzStav}</div>}
       </section>
 
       {naRade.length === 0 && <div className="panel muted">V tomto období není žádná revize na řadě.</div>}
