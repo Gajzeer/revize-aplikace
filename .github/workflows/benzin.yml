@@ -10,4 +10,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Stáhnout cenu
-        run: curl -sS --fail-with-body -X POST https://proddwpjcpceaodbmxvp.supabase.co/functions/v1/benzin -H "Content-Type: application/json" -d '{}'
+        run: |
+          curl -sS --fail-with-body -X POST https://proddwpjcpceaodbmxvp.supabase.co/functions/v1/benzin -H "Content-Type: application/json" -d '{}'
